@@ -20,22 +20,43 @@ class ECOSEigen
 
     ECOSEigen(const Eigen::SparseMatrix<double> &G,
               const Eigen::SparseMatrix<double> &A,
-              const Eigen::SparseMatrix<double> &c,
-              const Eigen::SparseMatrix<double> &h,
-              const Eigen::SparseMatrix<double> &b,
+              const Eigen::SparseVector<double> &c,
+              const Eigen::SparseVector<double> &h,
+              const Eigen::SparseVector<double> &b,
               const std::vector<size_t> &soc_dims);
 
-private:
-    size_t num_var;
-    size_t num_eq;   // number of equality constraints (p)
-    size_t num_ineq; // number of inequality constraints (m)
-    size_t num_pc;   // number of positive constraints (l)
-    size_t num_sc;   // number of second order cone constraints (ncones)
+    void Solve();
 
-    const double delta_reg = 7e-8; // Static Regularization
+private:
+    size_t iteration;
+    size_t max_iterations = 100;
+
+    Eigen::SparseMatrix<double> G;
+    Eigen::SparseMatrix<double> A;
+    Eigen::SparseVector<double> c;
+    Eigen::SparseVector<double> h;
+    Eigen::SparseVector<double> b;
+    std::vector<size_t> soc_dims;
+
+    size_t num_var;  // Number of variables
+    size_t num_eq;   // Number of equality constraints (p)
+    size_t num_ineq; // Number of inequality constraints (m)
+    size_t num_pc;   // Number of positive constraints (l)
+    size_t num_sc;   // Number of second order cone constraints (ncones)
+
+    Eigen::VectorXd rhs1, rhs2; // The two right hand sides in the KKT equations.
+
+    // The problem data scaling parameters
+    double rx, ry, rz;
+    double resx0, resy0, resz0;
+
+    const double delta_reg = 7e-8; // Static Regularization Parameter
 
     Eigen::SparseMatrix<double> K;
     void SetupKKT(const Eigen::SparseMatrix<double> &G,
                   const Eigen::SparseMatrix<double> &A,
                   const std::vector<size_t> &soc_dims);
+
+    void bringToCone(Eigen::VectorXd &x);
+    void computeResiduals();
 };

@@ -4,10 +4,11 @@
 
 ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
                      const Eigen::SparseMatrix<double> &A,
-                     const Eigen::SparseMatrix<double> &c,
-                     const Eigen::SparseMatrix<double> &h,
-                     const Eigen::SparseMatrix<double> &b,
+                     const Eigen::SparseVector<double> &c,
+                     const Eigen::SparseVector<double> &h,
+                     const Eigen::SparseVector<double> &b,
                      const std::vector<size_t> &soc_dims)
+    : G(G), A(A), c(c), h(h), b(b), soc_dims(soc_dims)
 {
     num_var = A.cols();
     num_eq = A.rows();
@@ -16,6 +17,183 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     num_pc = num_ineq - num_sc;
 
     SetupKKT(G, A, soc_dims);
+}
+
+/**
+ * Scales a conic variable such that it lies strictly in the cone.
+ * If it is already in the cone, r is simply copied to s.
+ * Otherwise s = r + (1 + alpha) * e where alpha is the biggest residual.
+ */
+void ECOSEigen::bringToCone(Eigen::VectorXd &x)
+{
+    double alpha = -0.99;
+
+    // ===== 1. Find maximum residual =====
+
+    /* Positive Orthant */
+    size_t i;
+    for (i = 0; i < num_pc; i++)
+    {
+        if (x[i] <= 0 && -x[i] > alpha)
+        {
+            alpha = -x[i];
+        }
+    }
+
+    /* Second-Order Cone */
+    double cres;
+    for (size_t cone_dim : soc_dims)
+    {
+        cres = x[i];
+        i++;
+        cres -= x.segment(i, cone_dim - 1).norm();
+        i += cone_dim - 1;
+
+        if (cres <= 0 && -cres > alpha)
+        {
+            alpha = -cres;
+        }
+    }
+
+    // ===== 2. Compute s = r + (1 + alpha) * e =====
+
+    alpha += 1.;
+
+    /* Positive Orthant */
+    x.head(num_pc).array() += alpha;
+
+    /* Second-order cone */
+    i = num_pc;
+    for (size_t cone_dim : soc_dims)
+    {
+        x[i] += alpha;
+        i += cone_dim;
+    }
+}
+
+void ECOSEigen::Solve()
+{
+    /**
+    * Set up first right hand side
+    * [ 0 ]
+    * [ b ]
+    * [ h ]
+    **/
+    rhs1.resize(K.rows());
+    rhs1.setZero();
+    rhs1.segment(num_var, num_eq) = b;
+    rhs1.segment(num_var + num_eq, num_pc) = h.head(num_pc);
+    size_t h_index = num_pc;
+    size_t rhs1_index = num_var + num_eq + num_pc;
+    for (size_t cone_dim : soc_dims)
+    {
+        rhs1.segment(rhs1_index, cone_dim) = h.segment(h_index, cone_dim);
+        h_index += cone_dim;
+        rhs1_index += cone_dim + 2;
+    }
+
+    /**
+    * Set up second right hand side
+    * [-c ]
+    * [ 0 ]
+    * [ 0 ]
+    **/
+    rhs2.resize(K.rows());
+    rhs2.setZero();
+    rhs2.head(num_var) = -c;
+
+    // Set up scalings of problem data
+    rx = c.norm();
+    ry = b.norm();
+    rz = h.norm();
+    resx0 = std::max(1., rx);
+    resy0 = std::max(1., ry);
+    resz0 = std::max(1., rz);
+
+    // Do LDLT factorization
+    using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
+    LDLT_t ldlt;
+    ldlt.analyzePattern(K);
+    ldlt.factorize(K);
+
+    /**
+	 * Primal Variables:
+     * 
+	 *  Solve 
+     * 
+     *  xhat = arg min ||Gx - h||_2^2  such that A * x = b
+	 *  r = h - G * xhat
+     * 
+	 * Equivalent to
+	 *
+	 * [ 0   A'  G' ] [ xhat ]     [ 0 ]
+     * [ A   0   0  ] [  y   ]  =  [ b ]
+     * [ G   0  -I  ] [ -r   ]     [ h ]
+     *
+     *        (  r                       if alphap < 0
+     * shat = < 
+     *        (  r + (1 + alphap) * e    otherwise
+     * 
+     * where alphap = inf{ alpha | r + alpha * e >= 0 }
+	 **/
+    const Eigen::VectorXd sol1 = ldlt.solve(rhs1);
+
+    const Eigen::VectorXd x = sol1.head(num_var);
+    Eigen::VectorXd r = -sol1.segment(num_var, num_eq);
+    bringToCone(r);
+
+    /**
+	 * Dual Variables:
+     * 
+	 * Solve 
+     * 
+     * (yhat, zbar) = arg min ||z||_2^2 such that G'*z + A'*y + c = 0
+	 *
+	 * Equivalent to
+	 *
+	 * [ 0   A'  G' ] [  x   ]     [ -c ]
+	 * [ A   0   0  ] [ yhat ]  =  [  0 ]
+	 * [ G   0  -I  ] [ zbar ]     [  0 ]
+	 *     
+     *        (  zbar                       if alphad < 0
+     * zhat = < 
+     *        (  zbar + (1 + alphad) * e    otherwise
+     * 
+	 * where alphad = inf{ alpha | zbar + alpha * e >= 0 }
+	 **/
+    const Eigen::VectorXd sol2 = ldlt.solve(rhs2);
+
+    const Eigen::VectorXd y = sol2.segment(num_var, num_eq);
+    Eigen::VectorXd z = sol2.segment(num_var, num_eq);
+    bringToCone(z);
+
+    /**
+    * Modify first right hand side
+    * [ 0 ]    [-c ] 
+    * [ b ] -> [ b ] 
+    * [ h ]    [ h ] 
+    **/
+    rhs1.head(num_var) = -c;
+
+    for (iteration = 0; iteration < max_iterations; iteration++)
+    {
+        /**
+        * Compute residuals.
+        *
+        * hrx = -A' * y - G' * z       rx = hrx - c .* tau       hresx = ||rx||_2
+        * hry = A * x                  ry = hry - b .* tau       hresy = ||ry||_2
+        * hrz = s + G * x              rz = hrz - h .* tau       hresz = ||rz||_2
+        * 
+        * rt = kappa + c'*x + b'*y + h'*z
+        **/
+
+        if (num_eq > 0)
+        {
+        }
+        else
+        {
+        }
+    }
 }
 
 void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
@@ -77,6 +255,7 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
 
     // G'
     {
+        // Linear block
         Eigen::SparseMatrix<double> Gt_block;
         size_t col_K = A.cols() + At.cols();
 
@@ -90,6 +269,7 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
         }
         col_K += num_pc;
 
+        // SOC blocks
         size_t col_Gt = col_K;
         for (size_t cone_dim : soc_dims)
         {
@@ -110,14 +290,14 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
     {
         size_t row_col = A.cols() + At.cols();
 
-        // First identity block of -V
+        // First identity block
         for (size_t k = 0; k < num_pc; k++)
         {
             K_triplets.emplace_back(row_col, row_col, -1.);
             row_col++;
         }
 
-        // SOC parts of -V
+        // SOC blocks
         /**
          * The scaling matrix has the following structure:
          *
@@ -163,7 +343,4 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
 
     K.setFromTriplets(K_triplets.begin(), K_triplets.end());
     assert(size_t(K.nonZeros()) == K_nonzeros);
-
-    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper> ldlt;
-    ldlt.compute(K);
 }
