@@ -19,6 +19,106 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     SetupKKT(G, A, soc_dims);
 }
 
+void ECOSEigen::computeResiduals()
+{
+    /**
+    * hrx = -A' * y - G' * z       rx = hrx - tau * c      hresx = ||rx||_2
+    * hry =  A * x                 ry = hry - tau * b      hresy = ||ry||_2
+    * hrz =  s + G * x             rz = hrz - tau * h      hresz = ||rz||_2
+    * 
+    * rt = kappa + c'*x + b'*y + h'*z
+    **/
+
+    // TODO: temporary definitions
+    Eigen::SparseVector<double> rx, ry, rz;
+    Eigen::SparseVector<double> x, y, z;
+    Eigen::SparseVector<double> s;
+    double tau;
+    double hresx, hresy, hresz;
+    double nx, ny, nz, ns;
+
+    /* rx = -A' * y - G' * z - tau * c */
+    if (num_eq > 0)
+    {
+        rx = -At * y - Gt * z;
+    }
+    else
+    {
+        rx = -Gt * z;
+    }
+    rx -= tau * c;
+    hresx = rx.norm();
+
+    /* ry = A * x - tau * b */
+    if (num_eq > 0)
+    {
+        ry = A * x;
+        hresy = ry.norm();
+        ry -= tau * b;
+    }
+    else
+    {
+        hresy = 0.;
+    }
+
+    /* rz = s + G * x - tau * h */
+    rz = s + G * x;
+    hresz = rz.norm();
+    rz -= tau * h;
+
+    nx = x.norm();
+    ny = y.norm();
+    nz = z.norm();
+    ns = s.norm();
+}
+
+void ECOSEigen::updateStatistics()
+{
+    // TODO: temporary definitions
+    double gap, mu, kap, tau, D, kapovert, pcost, dcost, cx, hz, by, relgap;
+    double nrx, nry, nrz, p, resy0, nx, ny, nz, ns;
+    double pres, dres, reltol;
+    double hresx, hresy, hresz;
+    std::optional<double> pinfres, dinfres;
+    Eigen::VectorXd s, z, rx, ry, rz;
+
+    gap = s.dot(z);
+    mu = (gap + kap * tau) / (D + 1.);
+    kapovert = kap / tau;
+    pcost = cx / tau;
+    dcost = -(hz + by) / tau;
+
+    /* Relative Duality Gap */
+    if (pcost < 0)
+    {
+        relgap = gap / -pcost;
+    }
+    else if (dcost > 0)
+    {
+        relgap = gap / dcost;
+    }
+    else
+    {
+        // fail
+    }
+
+    /* Residuals */
+    nry = p > 0 ? ry.norm() / std::max(resy0 + nx, 1.) : 0.0;
+    nrz = rz.norm() / std::max(resz0 + nx + ns, 1.);
+    pres = std::max(nry, nrz) / tau;
+    dres = rx.norm() / std::max(resx0 + ny + nz, 1.) / tau;
+
+    /* Infeasibility Measures */
+    if ((hz + by) / std::max(ny + nz, 1.) < -reltol)
+    {
+        pinfres = hresx / std::max(ny + nz, 1.);
+    }
+    if (cx / std::max(nx, 1.) < -reltol)
+    {
+        dinfres = std::max(hresy / std::max(nx, 1.), hresz / std::max(nx + ns, 1.));
+    }
+}
+
 /**
  * Scales a conic variable such that it lies strictly in the cone.
  * If it is already in the cone, r is simply copied to s.
@@ -103,12 +203,12 @@ void ECOSEigen::Solve()
     rhs2.head(num_var) = -c;
 
     // Set up scalings of problem data
-    rx = c.norm();
-    ry = b.norm();
-    rz = h.norm();
-    resx0 = std::max(1., rx);
-    resy0 = std::max(1., ry);
-    resz0 = std::max(1., rz);
+    scale_rx = c.norm();
+    scale_ry = b.norm();
+    scale_rz = h.norm();
+    resx0 = std::max(1., scale_rx);
+    resy0 = std::max(1., scale_ry);
+    resz0 = std::max(1., scale_rz);
 
     // Do LDLT factorization
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
@@ -177,23 +277,11 @@ void ECOSEigen::Solve()
 
     for (iteration = 0; iteration < max_iterations; iteration++)
     {
-        /**
-        * Compute residuals.
-        *
-        * hrx = -A' * y - G' * z       rx = hrx - c .* tau       hresx = ||rx||_2
-        * hry = A * x                  ry = hry - b .* tau       hresy = ||ry||_2
-        * hrz = s + G * x              rz = hrz - h .* tau       hresz = ||rz||_2
-        * 
-        * rt = kappa + c'*x + b'*y + h'*z
-        **/
-
-        if (num_eq > 0)
-        {
-        }
-        else
-        {
-        }
+        computeResiduals();
+        updateStatistics();
     }
+
+
 }
 
 void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
@@ -216,8 +304,8 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
     //                                                   ^ expanded scalings
     K.resize(K_dim, K_dim);
 
-    Eigen::SparseMatrix<double> At = A.transpose();
-    Eigen::SparseMatrix<double> Gt = G.transpose();
+    At = A.transpose();
+    Gt = G.transpose();
 
     size_t K_nonzeros = At.nonZeros() + Gt.nonZeros();
     // Static Regularization

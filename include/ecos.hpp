@@ -33,6 +33,8 @@ private:
 
     Eigen::SparseMatrix<double> G;
     Eigen::SparseMatrix<double> A;
+    Eigen::SparseMatrix<double> At;
+    Eigen::SparseMatrix<double> Gt;
     Eigen::SparseVector<double> c;
     Eigen::SparseVector<double> h;
     Eigen::SparseVector<double> b;
@@ -47,7 +49,7 @@ private:
     Eigen::VectorXd rhs1, rhs2; // The two right hand sides in the KKT equations.
 
     // The problem data scaling parameters
-    double rx, ry, rz;
+    double scale_rx, scale_ry, scale_rz;
     double resx0, resy0, resz0;
 
     const double delta_reg = 7e-8; // Static Regularization Parameter
@@ -59,4 +61,5 @@ private:
 
     void bringToCone(Eigen::VectorXd &x);
     void computeResiduals();
+    void updateStatistics();
 };
