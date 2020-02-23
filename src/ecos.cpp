@@ -8,7 +8,7 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
                      const Eigen::SparseVector<double> &h,
                      const Eigen::SparseVector<double> &b,
                      const std::vector<size_t> &soc_dims)
-    : G(G), A(A), c(c), h(h), b(b), soc_dims(soc_dims)
+    : G(G), A(A), c(c), h(h), b(b)
 {
     num_var = A.cols();
     num_eq = A.rows();
@@ -16,7 +16,186 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     num_ineq = G.rows(); // = num_pc + num_sc
     num_pc = num_ineq - num_sc;
 
-    SetupKKT(G, A, soc_dims);
+    so_cones.resize(num_sc);
+    for (size_t i = 0; i < num_sc; i++)
+    {
+        so_cones[i].dim = soc_dims[i];
+    }
+
+    SetupKKT(G, A);
+}
+
+/**
+ * Update scalings.
+ * Returns false as soon as any multiplier or slack leaves the cone,
+ * as this indicates severe problems.
+ */
+bool ECOSEigen::updateScalings()
+{
+    /* LP cone */
+    lp_cone.w = s.cwiseQuotient(z).cwiseSqrt();
+
+    /* Second-order cone */
+    size_t k = num_pc;
+    for (SecondOrderCone soc : so_cones)
+    {
+        /* check residuals and quit if they're negative */
+        const double sres = s(k) * s(k) - s.segment(k + 1, soc.dim - 1).squaredNorm();
+        const double zres = z(k) * z(k) - z.segment(k + 1, soc.dim - 1).squaredNorm();
+        if (sres <= 0 or zres <= 0)
+        {
+            return false;
+        }
+
+        /* normalize variables */
+        double snorm = std::sqrt(sres);
+        double znorm = std::sqrt(zres);
+
+        const Eigen::VectorXd skbar = s.segment(num_pc, soc.dim) / snorm;
+        const Eigen::VectorXd zkbar = z.segment(num_pc, soc.dim) / znorm;
+
+        soc.eta_square = snorm / znorm;
+        soc.eta = std::sqrt(soc.eta_square);
+
+        /* Normalized Nesterov-Todd scaling point */
+        double gamma = 1.;
+        gamma += skbar.dot(zkbar);
+        gamma = std::sqrt(0.5 * gamma);
+
+        double a = (0.5 / gamma) * (skbar(0) + zkbar(0));
+        Eigen::VectorXd q = (0.5 / gamma) * (skbar.tail(soc.dim - 1) - zkbar.tail(soc.dim - 1));
+        double w = q.squaredNorm();
+
+        /* Pre-compute variables needed for KKT matrix (kkt_update uses those) */
+
+        double c = (1. + a) + w / (1. + a);
+        double d = 1. + 2. / (1. + a) + w / ((1. + a) * (1. + a));
+
+        double d1 = std::max(0., 0.5 * (a * a + w * (1.0 - (c * c) / (1. + w * d))));
+        double u0_square = a * a + w - soc.d1;
+        double u0 = std::sqrt(u0_square);
+
+        double c2byu02 = (c * c) / u0_square;
+        double c2byu02_d = c2byu02 - d;
+        if (c2byu02_d <= 0)
+        {
+            return false;
+        }
+
+        soc.v1 = std::sqrt(c2byu02_d);
+        soc.u1 = std::sqrt(c2byu02);
+        soc.d1 = d1;
+        soc.u0 = u0;
+
+        /* increase offset for next cone */
+        k += soc.dim;
+    }
+    /* lambda = W*z */
+    scale();
+
+    return true;
+}
+
+/**
+ * Fast multiplication by scaling matrix.
+ * Returns lambda = W*z
+ * The exponential variables are not touched.
+ */
+void ECOSEigen::scale()
+{
+    /* LP cone */
+    size_t p = num_pc;
+    lambda.head(p) = lp_cone.w.head(p).cwiseProduct(z.head(p));
+
+    /* Second-order cone */
+    size_t cone_start = num_pc;
+    for (SecondOrderCone &soc : so_cones)
+    {
+        /* zeta = q'*z1 */
+        double zeta = soc.q.tail(soc.dim - 1).dot(z.segment(cone_start + 1, soc.dim - 1));
+
+        /* factor = z0 + zeta / (1+a); */
+        double factor = z(cone_start) + zeta / (1. + soc.a);
+
+        /* second pass (on k): write out result */
+        lambda(cone_start) = soc.eta * (soc.a * z(cone_start) + zeta); /* lambda[0] */
+        lambda.segment(cone_start + 1, p - 1) = soc.eta * (z + factor * soc.q.tail(p - 1));
+
+        cone_start += p;
+    }
+}
+
+/**
+ * This function is reponsible for checking the exit/convergence conditions of ECOS.
+ * If one of the exit conditions is met, ECOS displays an exit message and returns
+ * the corresponding exit code. The calling function must then make sure that ECOS
+ * is indeed correctly exited, so a call to this function should always be followed
+ * by a break statement.
+ *
+ * In reduced accuracy mode, reduced precisions are checked, and the exit display is augmented
+ *               by "Close to". The exitcodes returned are increased by the value
+ *               of mode.
+ *
+ * The primal and dual infeasibility flags pinf and dinf are raised
+ * according to the outcome of the test.
+ *
+ * If none of the exit tests are met, the function returns ECOS_NOT_CONVERGED_YET.
+ * This should not be an exitflag that is ever returned to the outside world.
+ **/
+bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
+{
+    double feastol;
+    double abstol;
+    double reltol;
+
+    /* Set accuracy against which to check */
+    if (reduced_accuracy)
+    {
+        /* Check convergence against normal precisions */
+        feastol = settings.feastol;
+        abstol = settings.abstol;
+        reltol = settings.reltol;
+    }
+    else
+    {
+        /* Check convergence against reduced precisions */
+        feastol = settings.feastol_inacc;
+        abstol = settings.abstol_inacc;
+        reltol = settings.reltol_inacc;
+    }
+
+    /* Optimal? */
+    if ((-cx > 0 or -by - hz >= -abstol) and
+        (info.pres < feastol and info.dres < feastol) and
+        (info.gap < abstol or info.relgap < reltol))
+    {
+        info.pinf = false;
+        info.dinf = false;
+        return true;
+    }
+
+    /* Dual infeasible? */
+    else if ((info.dinfres.has_value()) and (info.dinfres.value() < feastol) and (tau < kap))
+    {
+        info.pinf = false;
+        info.dinf = true;
+        return false;
+    }
+
+    /* Primal infeasible? */
+    else if (((info.pinfres.has_value() and info.pinfres < feastol) and (tau < kap)) or
+             (tau < feastol and kap < feastol and info.pinfres < feastol))
+    {
+        info.pinf = true;
+        info.dinf = false;
+        return false;
+    }
+
+    /* Indicate if none of the above criteria are met */
+    else
+    {
+        return false;
+    }
 }
 
 void ECOSEigen::computeResiduals()
@@ -28,14 +207,6 @@ void ECOSEigen::computeResiduals()
     * 
     * rt = kappa + c'*x + b'*y + h'*z
     **/
-
-    // TODO: temporary definitions
-    Eigen::SparseVector<double> rx, ry, rz;
-    Eigen::SparseVector<double> x, y, z;
-    Eigen::SparseVector<double> s;
-    double tau;
-    double hresx, hresy, hresz;
-    double nx, ny, nz, ns;
 
     /* rx = -A' * y - G' * z - tau * c */
     if (num_eq > 0)
@@ -74,28 +245,20 @@ void ECOSEigen::computeResiduals()
 
 void ECOSEigen::updateStatistics()
 {
-    // TODO: temporary definitions
-    double gap, mu, kap, tau, D, kapovert, pcost, dcost, cx, hz, by, relgap;
-    double nrx, nry, nrz, p, resy0, nx, ny, nz, ns;
-    double pres, dres, reltol;
-    double hresx, hresy, hresz;
-    std::optional<double> pinfres, dinfres;
-    Eigen::VectorXd s, z, rx, ry, rz;
-
-    gap = s.dot(z);
-    mu = (gap + kap * tau) / (D + 1.);
-    kapovert = kap / tau;
-    pcost = cx / tau;
-    dcost = -(hz + by) / tau;
+    info.gap = s.dot(z);
+    info.mu = (info.gap + kap * tau) / (D + 1.);
+    info.kapovert = kap / tau;
+    info.pcost = cx / tau;
+    info.dcost = -(hz + by) / tau;
 
     /* Relative Duality Gap */
-    if (pcost < 0)
+    if (info.pcost < 0)
     {
-        relgap = gap / -pcost;
+        info.relgap = info.gap / -info.pcost;
     }
-    else if (dcost > 0)
+    else if (info.dcost > 0)
     {
-        relgap = gap / dcost;
+        info.relgap = info.gap / info.dcost;
     }
     else
     {
@@ -103,19 +266,19 @@ void ECOSEigen::updateStatistics()
     }
 
     /* Residuals */
-    nry = p > 0 ? ry.norm() / std::max(resy0 + nx, 1.) : 0.0;
-    nrz = rz.norm() / std::max(resz0 + nx + ns, 1.);
-    pres = std::max(nry, nrz) / tau;
-    dres = rx.norm() / std::max(resx0 + ny + nz, 1.) / tau;
+    double nry = num_eq > 0 ? ry.norm() / std::max(resy0 + nx, 1.) : 0.;
+    double nrz = rz.norm() / std::max(resz0 + nx + ns, 1.);
+    info.pres = std::max(nry, nrz) / tau;
+    info.dres = rx.norm() / std::max(resx0 + ny + nz, 1.) / tau;
 
     /* Infeasibility Measures */
-    if ((hz + by) / std::max(ny + nz, 1.) < -reltol)
+    if ((hz + by) / std::max(ny + nz, 1.) < -settings.reltol)
     {
-        pinfres = hresx / std::max(ny + nz, 1.);
+        info.pinfres = hresx / std::max(ny + nz, 1.);
     }
-    if (cx / std::max(nx, 1.) < -reltol)
+    if (cx / std::max(nx, 1.) < -settings.reltol)
     {
-        dinfres = std::max(hresy / std::max(nx, 1.), hresz / std::max(nx + ns, 1.));
+        info.dinfres = std::max(hresy / std::max(nx, 1.), hresz / std::max(nx + ns, 1.));
     }
 }
 
@@ -134,7 +297,7 @@ void ECOSEigen::bringToCone(Eigen::VectorXd &x)
     size_t i;
     for (i = 0; i < num_pc; i++)
     {
-        if (x[i] <= 0 && -x[i] > alpha)
+        if (x[i] <= 0 and -x[i] > alpha)
         {
             alpha = -x[i];
         }
@@ -142,14 +305,14 @@ void ECOSEigen::bringToCone(Eigen::VectorXd &x)
 
     /* Second-Order Cone */
     double cres;
-    for (size_t cone_dim : soc_dims)
+    for (const SecondOrderCone &sc : so_cones)
     {
         cres = x[i];
         i++;
-        cres -= x.segment(i, cone_dim - 1).norm();
-        i += cone_dim - 1;
+        cres -= x.segment(i, sc.dim - 1).norm();
+        i += sc.dim - 1;
 
-        if (cres <= 0 && -cres > alpha)
+        if (cres <= 0 and -cres > alpha)
         {
             alpha = -cres;
         }
@@ -164,15 +327,18 @@ void ECOSEigen::bringToCone(Eigen::VectorXd &x)
 
     /* Second-order cone */
     i = num_pc;
-    for (size_t cone_dim : soc_dims)
+    for (const SecondOrderCone &sc : so_cones)
     {
         x[i] += alpha;
-        i += cone_dim;
+        i += sc.dim;
     }
 }
 
 void ECOSEigen::Solve()
 {
+    // Equilibrate
+    c.cwiseQuotient(x_equil);
+
     /**
     * Set up first right hand side
     * [ 0 ]
@@ -185,11 +351,11 @@ void ECOSEigen::Solve()
     rhs1.segment(num_var + num_eq, num_pc) = h.head(num_pc);
     size_t h_index = num_pc;
     size_t rhs1_index = num_var + num_eq + num_pc;
-    for (size_t cone_dim : soc_dims)
+    for (const SecondOrderCone &sc : so_cones)
     {
-        rhs1.segment(rhs1_index, cone_dim) = h.segment(h_index, cone_dim);
-        h_index += cone_dim;
-        rhs1_index += cone_dim + 2;
+        rhs1.segment(rhs1_index, sc.dim) = h.segment(h_index, sc.dim);
+        h_index += sc.dim;
+        rhs1_index += sc.dim + 2;
     }
 
     /**
@@ -275,18 +441,15 @@ void ECOSEigen::Solve()
     **/
     rhs1.head(num_var) = -c;
 
-    for (iteration = 0; iteration < max_iterations; iteration++)
+    for (iteration = 0; iteration < info.iter_max; iteration++)
     {
         computeResiduals();
         updateStatistics();
     }
-
-
 }
 
 void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
-                         const Eigen::SparseMatrix<double> &A,
-                         const std::vector<size_t> &soc_dims)
+                         const Eigen::SparseMatrix<double> &A)
 {
     /**
      *      [ 0  A' G' ]
@@ -312,10 +475,10 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
     K_nonzeros += num_var + num_eq;
     // Positive part of scaling block V
     K_nonzeros += num_pc;
-    for (size_t cone_dim : soc_dims)
+    for (const SecondOrderCone &sc : so_cones)
     {
         // SC part of scaling block V
-        K_nonzeros += 3 * cone_dim + 1;
+        K_nonzeros += 3 * sc.dim + 1;
     }
     K.reserve(K_nonzeros);
 
@@ -325,11 +488,11 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
     // Static Regularization of blocks (1,1) and (2,2)
     for (size_t k = 0; k < num_var; k++)
     {
-        K_triplets.emplace_back(k, k, delta_reg);
+        K_triplets.emplace_back(k, k, settings.delta);
     }
     for (size_t k = 0; k < num_eq; k++)
     {
-        K_triplets.emplace_back(num_var + k, num_var + k, -delta_reg);
+        K_triplets.emplace_back(num_var + k, num_var + k, -settings.delta);
     }
 
     // A'
@@ -359,9 +522,9 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
 
         // SOC blocks
         size_t col_Gt = col_K;
-        for (size_t cone_dim : soc_dims)
+        for (const SecondOrderCone &sc : so_cones)
         {
-            Gt_block = Gt.middleCols(col_Gt, cone_dim);
+            Gt_block = Gt.middleCols(col_Gt, sc.dim);
             for (int k = 0; k < Gt_block.outerSize(); k++)
             {
                 for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
@@ -369,8 +532,8 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
                     K_triplets.emplace_back(it.row(), col_K + it.col(), it.value());
                 }
             }
-            col_K += cone_dim + 2;
-            col_Gt += cone_dim;
+            col_K += sc.dim + 2;
+            col_Gt += sc.dim;
         }
     }
 
@@ -401,9 +564,9 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
          *
          *  Only the upper triangular part is constructed here.
          **/
-        for (size_t cone_dim : soc_dims)
+        for (const SecondOrderCone &sc : so_cones)
         {
-            for (size_t k = 0; k < cone_dim; k++)
+            for (size_t k = 0; k < sc.dim; k++)
             {
                 K_triplets.emplace_back(row_col, row_col, -1.);
                 row_col++;
@@ -413,18 +576,18 @@ void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
             K_triplets.emplace_back(row_col, row_col, -1.);
 
             // -v
-            for (size_t k = 1; k < cone_dim; k++)
+            for (size_t k = 1; k < sc.dim; k++)
             {
-                K_triplets.emplace_back(row_col - cone_dim + k, row_col, -1.);
+                K_triplets.emplace_back(row_col - sc.dim + k, row_col, -1.);
             }
 
             row_col++;
             K_triplets.emplace_back(row_col, row_col, 1.);
 
             // -u
-            for (size_t k = 0; k < cone_dim; k++)
+            for (size_t k = 0; k < sc.dim; k++)
             {
-                K_triplets.emplace_back(row_col - cone_dim - 1 + k, row_col, -1.);
+                K_triplets.emplace_back(row_col - sc.dim - 1 + k, row_col, -1.);
             }
         }
     }
