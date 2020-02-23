@@ -144,14 +144,18 @@ private:
 
     // KKT Matrix
     Eigen::SparseMatrix<double> K;
+    using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
+    LDLT_t ldlt;
 
-    void SetupKKT(const Eigen::SparseMatrix<double> &G,
+
+    void setupKKT(const Eigen::SparseMatrix<double> &G,
                   const Eigen::SparseMatrix<double> &A);
-
+    void updateKKT();
     void bringToCone(Eigen::VectorXd &x);
     void computeResiduals();
     void updateStatistics();
     bool checkExitConditions(bool reduced_accuracy);
     bool updateScalings();
     void scale();
+    void RHS_affine();
 };

@@ -22,7 +22,7 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
         so_cones[i].dim = soc_dims[i];
     }
 
-    SetupKKT(G, A);
+    setupKKT(G, A);
 }
 
 /**
@@ -377,8 +377,6 @@ void ECOSEigen::Solve()
     resz0 = std::max(1., scale_rz);
 
     // Do LDLT factorization
-    using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
-    LDLT_t ldlt;
     ldlt.analyzePattern(K);
     ldlt.factorize(K);
 
@@ -441,14 +439,94 @@ void ECOSEigen::Solve()
     **/
     rhs1.head(num_var) = -c;
 
+    bool done = false;
     for (iteration = 0; iteration < info.iter_max; iteration++)
     {
         computeResiduals();
         updateStatistics();
+        done = checkExitConditions(false);
+
+        updateKKT();
+
+        /* Solve for RHS1, which is used later also in combined direction */
+        const Eigen::VectorXd sol1 = ldlt.solve(rhs1);
+
+        /* AFFINE SEARCH DIRECTION (predictor, need dsaff and dzaff only) */
+        RHS_affine();
+        const Eigen::VectorXd sol2 = ldlt.solve(rhs2);
+
+        const Eigen::VectorXd dx1 = sol2.head(num_var);
+        const Eigen::VectorXd dy1 = sol2.segment(num_var, num_eq);
+        const Eigen::VectorXd dz1 = unstretch(sol2.tail(sol2.size() - num_var - num_eq));
+        double dtau_denom = kap / tau - c.dot(dx1) + b.dot(dy1) - h.dot(dz1));
     }
 }
 
-void ECOSEigen::SetupKKT(const Eigen::SparseMatrix<double> &G,
+/**
+ * Prepares the affine RHS for KKT system.
+ * Given the special way we store the KKT matrix (sparse representation
+ * of the scalings for the second-order cone), we need this to prepare
+ * the RHS before solving the KKT system in the special format.
+ */
+void ECOSEigen::RHS_affine()
+{
+    rhs2.head(num_var + num_eq) << rx, -ry;
+
+    rhs2.segment(num_var + num_eq, num_pc) = rz.head(num_pc);
+
+    size_t i = 0;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        rhs2.segment(num_var + num_eq + num_pc + i, sc.dim) = s.segment(i, sc.dim) - rz.segment(i, sc.dim);
+        i += sc.dim;
+        rhs2.segment(num_var + num_eq + num_pc + i, 2).setZero();
+        i += 2;
+    }
+}
+
+void ECOSEigen::updateKKT()
+{
+    // TODO: Faster element access.
+
+    /* LP cone */
+    for (size_t i = 0; i < lp_cone.dim; i++)
+    {
+        K.coeffRef(i, i) = -lp_cone.v(i) - settings.delta;
+    }
+
+    /* Second-order cone */
+    size_t diag_index = lp_cone.dim;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        /* D */
+        K.coeffRef(diag_index, diag_index) = -sc.eta_square * sc.d1 - settings.delta;
+        for (size_t k = 1; k < sc.dim; k++)
+        {
+            diag_index++;
+            K.coeffRef(diag_index, diag_index) = -sc.eta_square - settings.delta;
+        }
+
+        /* v */
+        diag_index++;
+        for (size_t k = 0; k < sc.dim - 1; k++)
+        {
+            K.coeffRef(diag_index - sc.dim + k, diag_index) = -sc.eta_square * sc.v1 * sc.q(k);
+        }
+
+        /* u */
+        diag_index++;
+        K.coeffRef(diag_index - sc.dim - 1, diag_index) = -sc.eta_square * sc.u0;
+        for (size_t k = 1; k < sc.dim; k++)
+        {
+            K.coeffRef(diag_index - sc.dim - 1 + k, diag_index) = -sc.eta_square * sc.u1 * sc.q(k);
+        }
+        K.coeffRef(diag_index, diag_index) = sc.eta_square + settings.delta;
+    }
+
+    ldlt.factorize(K);
+}
+
+void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
                          const Eigen::SparseMatrix<double> &A)
 {
     /**
