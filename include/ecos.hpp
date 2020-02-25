@@ -4,18 +4,20 @@
 
 struct Settings
 {
-    double gamma;         /* scaling the final step length        */
-    double delta;         /* regularization parameter             */
-    double eps;           /* regularization threshold             */
-    double feastol;       /* primal/dual infeasibility tolerance  */
-    double abstol;        /* absolute tolerance on duality gap    */
-    double reltol;        /* relative tolerance on duality gap    */
-    double feastol_inacc; /* primal/dual infeasibility relaxed tolerance */
-    double abstol_inacc;  /* absolute relaxed tolerance on duality gap   */
-    double reltol_inacc;  /* relative relaxed tolerance on duality gap   */
-    size_t nitref;        /* number of iterative refinement steps */
-    size_t maxit;         /* maximum number of iterations         */
-    size_t verbose;       /* verbosity bool for PRINTLEVEL < 3    */
+    double gamma;         // scaling the final step length
+    double delta;         // regularization parameter
+    double eps;           // regularization threshold
+    double feastol;       // primal/dual infeasibility tolerance
+    double abstol;        // absolute tolerance on duality gap
+    double reltol;        // relative tolerance on duality gap
+    double feastol_inacc; // primal/dual infeasibility relaxed tolerance
+    double abstol_inacc;  // absolute relaxed tolerance on duality gap
+    double reltol_inacc;  // relative relaxed tolerance on duality gap
+    size_t nitref;        // number of iterative refinement steps
+    size_t maxit;         // maximum number of iterations
+    size_t verbose;       // verbosity bool for PRINTLEVEL < 3
+    double linsysacc;     // rel. accuracy of search direction
+    double irerrfact;     // factor by which IR should reduce err
 };
 
 struct Information
@@ -115,7 +117,7 @@ private:
     Eigen::VectorXd lambda; // Scaled variable                      size m
 
     // Residuals
-    Eigen::VectorXd rx, ry, rz;
+    Eigen::VectorXd rx, ry, rz; // sizes n, p, m
     double hresx, hresy, hresz;
 
     // Norm iterates
@@ -147,10 +149,14 @@ private:
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
     LDLT_t ldlt;
 
-
     void setupKKT(const Eigen::SparseMatrix<double> &G,
                   const Eigen::SparseMatrix<double> &A);
     void updateKKT();
+    void solveKKT(const Eigen::VectorXd &rhs,
+                  Eigen::VectorXd &dx,
+                  Eigen::VectorXd &dy,
+                  Eigen::VectorXd &dz,
+                  bool initialized);
     void bringToCone(Eigen::VectorXd &x);
     void computeResiduals();
     void updateStatistics();
@@ -158,4 +164,5 @@ private:
     bool updateScalings();
     void scale();
     void RHS_affine();
+    void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
 };

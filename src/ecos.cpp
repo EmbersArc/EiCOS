@@ -446,19 +446,186 @@ void ECOSEigen::Solve()
         updateStatistics();
         done = checkExitConditions(false);
 
+        if (done)
+        {
+            break;
+        }
+
         updateKKT();
 
+        Eigen::VectorXd dx, dy, dz;
+
         /* Solve for RHS1, which is used later also in combined direction */
-        const Eigen::VectorXd sol1 = ldlt.solve(rhs1);
+        solveKKT(rhs1, dx, dy, dz, true);
 
         /* AFFINE SEARCH DIRECTION (predictor, need dsaff and dzaff only) */
         RHS_affine();
-        const Eigen::VectorXd sol2 = ldlt.solve(rhs2);
+        solveKKT(rhs2, dx, dy, dz, true);
+    }
+}
 
-        const Eigen::VectorXd dx1 = sol2.head(num_var);
-        const Eigen::VectorXd dy1 = sol2.segment(num_var, num_eq);
-        const Eigen::VectorXd dz1 = unstretch(sol2.tail(sol2.size() - num_var - num_eq));
-        double dtau_denom = kap / tau - c.dot(dx1) + b.dot(dy1) - h.dot(dz1));
+void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
+                         Eigen::VectorXd &dx,
+                         Eigen::VectorXd &dy,
+                         Eigen::VectorXd &dz,
+                         bool initialized)
+{
+    /* forward - diagonal - backward solves */
+    Eigen::VectorXd x = ldlt.solve(rhs1);
+
+    // TODO: Assign those correctly:
+    Eigen::VectorXd bx, by, bz;
+
+    const double error_threshold = (1. + rhs.lpNorm<1>()) * settings.linsysacc;
+
+    double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
+    Eigen::VectorXd dx_ref;                                // Refinement vector
+
+    /* iterative refinement */
+    for (size_t kItRef = 0; kItRef <= settings.nitref; kItRef++)
+    {
+        /* copy solution into arrays */
+        const Eigen::VectorXd dx = x.head(num_var);
+        const Eigen::VectorXd dy = x.segment(num_var, num_eq);
+        Eigen::VectorXd dz;
+        dz.resize(num_ineq);
+        dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
+        size_t dz_index = 0;
+        size_t x_index = 0;
+        for (const SecondOrderCone &sc : so_cones)
+        {
+            dz.segment(dz_index, sc.dim) = x.segment(num_var + num_eq + num_pc + dz_index, sc.dim);
+            dz_index += sc.dim;
+            x_index += sc.dim + 2;
+        }
+
+        /* compute error term */
+
+        /* 1. error on dx */
+        /* ex = bx - A' * dy - G' * dz */
+        Eigen::VectorXd ex = bx;
+        if (num_eq > 0)
+        {
+            ex -= A.transpose() * dy;
+        }
+        ex -= G.transpose() * dz;
+        const double nex = ex.lpNorm<1>();
+
+        /* 2, error on dy */
+        Eigen::VectorXd ey;
+        ey.resize(num_eq);
+        if (num_eq > 0)
+        {
+            /* ey = by - A * dx */
+            ey = by - A * dx;
+        }
+        const double ney = ey.lpNorm<1>();
+
+        /* 3. ez = bz - G * dx + V * dz_true */
+        Eigen::VectorXd ez, Gdx;
+        ez.resize(num_ineq);
+        ez.setZero();
+        Gdx = G * dx;
+        ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc);
+        size_t ez_index = num_pc;
+        size_t bz_index = num_pc;
+        for (const SecondOrderCone &sc : so_cones)
+        {
+            ez.segment(ez_index, sc.dim) = bz.segment(bz_index, sc.dim);
+            ez_index += sc.dim;
+            bz_index += sc.dim;
+            ez.segment(ez_index, 2).setZero();
+            ez_index += 2;
+        }
+
+        const size_t mtilde = num_ineq + 2 * so_cones.size();
+        const Eigen::VectorXd truez = x.segment(num_var + num_eq, mtilde);
+
+        if (not initialized)
+        {
+            scale2add(truez, ez);
+        }
+        else
+        {
+            ez += truez;
+        }
+
+        const double nez = ez.lpNorm<1>();
+
+        /* maximum error (infinity norm of e) */
+        double nerr = std::max(nex, nez);
+
+        if (num_eq > 0)
+        {
+            nerr = std::max(nerr, ney);
+        }
+
+        /* Check whether refinement brought decrease */
+        if (kItRef > 0 && nerr > nerr_prev)
+        {
+            /* If not, undo and quit */
+            x -= dx;
+            kItRef--;
+            break;
+        }
+
+        /* Check whether to stop refining */
+        if (kItRef == settings.nitref or
+            (nerr < error_threshold) or
+            (kItRef > 0 and nerr_prev < settings.irerrfact * nerr))
+        {
+            break;
+        }
+        nerr_prev = nerr;
+
+        Eigen::VectorXd e(ex.size() + ey.size() + ez.size());
+        e << ex, ey, ez;
+        dx_ref = ldlt.solve(e);
+
+        /* Add refinement to x*/
+        x += dx_ref;
+    }
+}
+
+/**
+ *                                       [ D   v   u  ]
+ * Slow multiplication with V =  eta^2 * [ v'  1   0  ] = W^2
+ *                                       [ u   0  -1  ]
+ * Computes y += W^2*x;
+ */
+void ECOSEigen::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
+{
+    /* LP cone */
+    y.head(num_pc) += lp_cone.v.cwiseProduct(x.head(num_pc));
+
+    /* Second-order cone */
+    size_t cone_start = num_pc;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        const size_t dim = sc.dim + 2;
+        Eigen::MatrixXd W_squared = Eigen::MatrixXd::Identity(dim, dim);
+
+        // diagonal
+        W_squared(0, 0) = sc.d1;
+        W_squared(dim - 1, dim - 1) = -1.;
+
+        // v
+        W_squared.col(dim - 2).segment(1, sc.dim - 1).setConstant(sc.v1);
+        // v'
+        W_squared.row(dim - 2).segment(1, sc.dim - 1).setConstant(sc.v1);
+
+        // u
+        W_squared.col(dim - 1)(0) = sc.u0;
+        W_squared.col(dim - 1).segment(1, sc.dim - 1).setConstant(sc.u1);
+        // u'
+        W_squared.row(dim - 1)(0) = sc.u0;
+        W_squared.row(dim - 1).segment(1, sc.dim - 1).setConstant(sc.u1);
+
+        W_squared *= sc.eta_square;
+
+        y.segment(cone_start, dim) += W_squared * x.segment(cone_start, dim);
+
+        cone_start += dim;
     }
 }
 
@@ -474,13 +641,15 @@ void ECOSEigen::RHS_affine()
 
     rhs2.segment(num_var + num_eq, num_pc) = rz.head(num_pc);
 
-    size_t i = 0;
+    size_t rhs_index = num_pc;
+    size_t rz_index = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
-        rhs2.segment(num_var + num_eq + num_pc + i, sc.dim) = s.segment(i, sc.dim) - rz.segment(i, sc.dim);
-        i += sc.dim;
-        rhs2.segment(num_var + num_eq + num_pc + i, 2).setZero();
-        i += 2;
+        rhs2.segment(num_var + num_eq + num_pc + rhs_index, sc.dim) = s.segment(rhs_index, sc.dim) - rz.segment(rz_index, sc.dim);
+        rhs_index += sc.dim;
+        rz_index += sc.dim;
+        rhs2.segment(num_var + num_eq + num_pc + rhs_index, 2).setZero();
+        rhs_index += 2;
     }
 }
 
