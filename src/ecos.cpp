@@ -15,6 +15,7 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     num_sc = soc_dims.size();
     num_ineq = G.rows(); // = num_pc + num_sc
     num_pc = num_ineq - num_sc;
+    dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
 
     so_cones.resize(num_sc);
     for (size_t i = 0; i < num_sc; i++)
@@ -237,6 +238,12 @@ void ECOSEigen::computeResiduals()
     hresz = rz.norm();
     rz -= tau * h;
 
+    /* rt = kappa + c' * x + b' * y + h' * z; */
+    cx = c.dot(x);
+    by = num_eq > 0 ? b.dot(y) : 0.;
+    hz = h.dot(z);
+    rt = kap + cx + by + hz;
+
     nx = x.norm();
     ny = y.norm();
     nz = z.norm();
@@ -400,11 +407,14 @@ void ECOSEigen::Solve()
      * 
      * where alphap = inf{ alpha | r + alpha * e >= 0 }
 	 **/
-    const Eigen::VectorXd sol1 = ldlt.solve(rhs1);
 
-    const Eigen::VectorXd x = sol1.head(num_var);
-    Eigen::VectorXd r = -sol1.segment(num_var, num_eq);
-    bringToCone(r);
+    /* Solve for RHS [0; b; h] */
+    Eigen::VectorXd dx1, dy1, dz1;
+    solveKKT(rhs1, dx1, dy1, dz1, true);
+
+    /* Copy out -r and bring to cone */
+    s = -dz1;
+    bringToCone(s);
 
     /**
 	 * Dual Variables:
@@ -425,10 +435,12 @@ void ECOSEigen::Solve()
      * 
 	 * where alphad = inf{ alpha | zbar + alpha * e >= 0 }
 	 **/
-    const Eigen::VectorXd sol2 = ldlt.solve(rhs2);
 
-    const Eigen::VectorXd y = sol2.segment(num_var, num_eq);
-    Eigen::VectorXd z = sol2.segment(num_var, num_eq);
+    /* Solve for RHS [-c; 0; 0] */
+    Eigen::VectorXd dx2, dy2, dz2;
+    solveKKT(rhs2, dx1, dy1, dz1, true);
+
+    z = dy2;
     bringToCone(z);
 
     /**
@@ -456,22 +468,50 @@ void ECOSEigen::Solve()
         Eigen::VectorXd dx, dy, dz;
 
         /* Solve for RHS1, which is used later also in combined direction */
-        solveKKT(rhs1, dx, dy, dz, true);
+        solveKKT(rhs1, dx1, dy1, dz1, false);
 
-        /* AFFINE SEARCH DIRECTION (predictor, need dsaff and dzaff only) */
+        /* Affine Search Direction (predictor, need dsaff and dzaff only) */
         RHS_affine();
-        solveKKT(rhs2, dx, dy, dz, true);
+        solveKKT(rhs2, dx2, dy2, dz2, false);
+
+        /* dtau_denom = kap/tau - (c' * x1 + b * y1 + h' * z1); */
+        const double dtau_denom = kap / tau - c.dot(dx1) - b.dot(dy1) - h.dot(dz1);
+
+        /* dtauaff = (dt + c' * x2 + b * y2 + h' * z2) / dtau_denom; */
+        const double dtauaff = (rt - kap + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
+
+        /* dzaff = dz2 + dtau_aff * dz1 */
+        /* Let dz2   = dzaff   // We use this in the linesearch for unsymmetric cones */
+        /* and w_times_dzaff = W * dz_aff */
+        /* and dz2 = dz2 + dtau_aff * dz1 will store the unscaled dz */
+        dz2 += dtauaff * dz1;
+        // scale(dz2, W_times_dzaff);
     }
 }
 
-void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
-                         Eigen::VectorXd &dx,
-                         Eigen::VectorXd &dy,
-                         Eigen::VectorXd &dz,
-                         bool initialized)
+/**
+ * Fast multiplication by scaling matrix.
+ * Returns lambda = W*z
+ * The exponential variables are not touched.
+ */
+void ECOSEigen::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
 {
-    /* forward - diagonal - backward solves */
-    Eigen::VectorXd x = ldlt.solve(rhs1);
+    /* LP cone */
+    lambda = lp_cone.w.cwiseProduct(z);
+
+    /* Second-order cone */
+    for (const SecondOrderCone &sc : so_cones)
+    {
+    }
+}
+
+void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
+                         Eigen::VectorXd &dx,        // num_var
+                         Eigen::VectorXd &dy,        // num_eq
+                         Eigen::VectorXd &dz,        // num_ineq
+                         bool initialize)
+{
+    Eigen::VectorXd x = ldlt.solve(rhs);
 
     // TODO: Assign those correctly:
     Eigen::VectorXd bx, by, bz;
@@ -481,27 +521,25 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
     double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
     Eigen::VectorXd dx_ref;                                // Refinement vector
 
-    /* iterative refinement */
+    /* Iterative refinement */
     for (size_t kItRef = 0; kItRef <= settings.nitref; kItRef++)
     {
-        /* copy solution into arrays */
-        const Eigen::VectorXd dx = x.head(num_var);
-        const Eigen::VectorXd dy = x.segment(num_var, num_eq);
-        Eigen::VectorXd dz;
-        dz.resize(num_ineq);
+        /* Copy solution into arrays */
+        dx = x.head(num_var);
+        dy = x.segment(num_var, num_eq);
         dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
         size_t dz_index = 0;
-        size_t x_index = 0;
+        size_t x_index = num_var + num_eq + num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
-            dz.segment(dz_index, sc.dim) = x.segment(num_var + num_eq + num_pc + dz_index, sc.dim);
+            dz.segment(dz_index, sc.dim) = x.segment(x_index, sc.dim);
             dz_index += sc.dim;
             x_index += sc.dim + 2;
         }
 
-        /* compute error term */
+        /* Compute error term */
 
-        /* 1. error on dx */
+        /* Error on dx */
         /* ex = bx - A' * dy - G' * dz */
         Eigen::VectorXd ex = bx;
         if (num_eq > 0)
@@ -511,17 +549,18 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
         ex -= G.transpose() * dz;
         const double nex = ex.lpNorm<1>();
 
-        /* 2, error on dy */
+        /* Error on dy */
+        /* ey = by - A * dx */
         Eigen::VectorXd ey;
         ey.resize(num_eq);
         if (num_eq > 0)
         {
-            /* ey = by - A * dx */
             ey = by - A * dx;
         }
         const double ney = ey.lpNorm<1>();
 
-        /* 3. ez = bz - G * dx + V * dz_true */
+        /* Error on ez */
+        /* ez = bz - G * dx + V * dz_true */
         Eigen::VectorXd ez, Gdx;
         ez.resize(num_ineq);
         ez.setZero();
@@ -541,13 +580,13 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
         const size_t mtilde = num_ineq + 2 * so_cones.size();
         const Eigen::VectorXd truez = x.segment(num_var + num_eq, mtilde);
 
-        if (not initialized)
+        if (initialize)
         {
-            scale2add(truez, ez);
+            ez += truez;
         }
         else
         {
-            ez += truez;
+            scale2add(truez, ez);
         }
 
         const double nez = ez.lpNorm<1>();
@@ -564,7 +603,7 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
         if (kItRef > 0 && nerr > nerr_prev)
         {
             /* If not, undo and quit */
-            x -= dx;
+            x -= dx_ref;
             kItRef--;
             break;
         }
@@ -585,13 +624,27 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs,
         /* Add refinement to x*/
         x += dx_ref;
     }
+
+    /* Copy solution into arrays */
+    dx = x.head(num_var);
+    dy = x.segment(num_var, num_eq);
+    dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
+    size_t dz_index = 0;
+    size_t x_index = num_var + num_eq + num_pc;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        dz.segment(dz_index, sc.dim) = x.segment(x_index, sc.dim);
+        dz_index += sc.dim;
+        x_index += sc.dim + 2;
+    }
 }
 
 /**
- *                                       [ D   v   u  ]
- * Slow multiplication with V =  eta^2 * [ v'  1   0  ] = W^2
- *                                       [ u   0  -1  ]
- * Computes y += W^2*x;
+ *                                            [ D   v   u  ]
+ * Slow multiplication with V = W^2 = eta^2 * [ v'  1   0  ] 
+ *                                            [ u   0  -1  ]
+ * Computes y += W^2 * x;
+ * 
  */
 void ECOSEigen::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
 {
@@ -710,9 +763,7 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
      *  Only the upper triangular part is constructed here.
      **/
 
-    const size_t K_dim = num_var + num_eq + num_ineq + 2 * num_sc;
-    //                                                   ^ expanded scalings
-    K.resize(K_dim, K_dim);
+    K.resize(dim_K, dim_K);
 
     At = A.transpose();
     Gt = G.transpose();

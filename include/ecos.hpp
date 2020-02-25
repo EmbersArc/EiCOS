@@ -110,15 +110,16 @@ private:
     Eigen::SparseVector<double> h;
     Eigen::SparseVector<double> b;
 
-    Eigen::VectorXd x;      // Primal variables                     size n
-    Eigen::VectorXd y;      // Multipliers for equality constaints  size p
-    Eigen::VectorXd z;      // Multipliers for conic inequalities   size m
-    Eigen::VectorXd s;      // Slacks for conic inequalities        size m
-    Eigen::VectorXd lambda; // Scaled variable                      size m
+    Eigen::VectorXd x;      // Primal variables                     size num_var
+    Eigen::VectorXd y;      // Multipliers for equality constaints  size num_eq
+    Eigen::VectorXd z;      // Multipliers for conic inequalities   size num_ineq
+    Eigen::VectorXd s;      // Slacks for conic inequalities        size num_ineq
+    Eigen::VectorXd lambda; // Scaled variable                      size num_ineq
 
     // Residuals
-    Eigen::VectorXd rx, ry, rz; // sizes n, p, m
+    Eigen::VectorXd rx, ry, rz; // sizes num_var, num_eq, num_ineq
     double hresx, hresy, hresz;
+    double rt;
 
     // Norm iterates
     double nx, ny, nz, ns;
@@ -127,17 +128,19 @@ private:
     Eigen::SparseMatrix<double> G_equil;
     Eigen::SparseMatrix<double> A_equil;
 
-    size_t num_var;  // Number of variables
+    size_t num_var;  // Number of variables (n)
     size_t num_eq;   // Number of equality constraints (p)
     size_t num_ineq; // Number of inequality constraints (m)
     size_t num_pc;   // Number of positive constraints (l)
     size_t num_sc;   // Number of second order cone constraints (ncones)
+    size_t dim_K;    // Dimension of KKT matrix
     size_t D;        // Degree of the cone
 
     Eigen::VectorXd rhs1, rhs2; // The two right hand sides in the KKT equations.
 
-    double kap; // kappa (homogeneous embedding)
-    double tau; // tau (homogeneous embedding)
+    // Homogeneous embedding
+    double kap; // kappa
+    double tau; // tau
 
     // The problem data scaling parameters
     double scale_rx, scale_ry, scale_rz;
@@ -156,7 +159,7 @@ private:
                   Eigen::VectorXd &dx,
                   Eigen::VectorXd &dy,
                   Eigen::VectorXd &dz,
-                  bool initialized);
+                  bool initialize);
     void bringToCone(Eigen::VectorXd &x);
     void computeResiduals();
     void updateStatistics();
@@ -165,4 +168,5 @@ private:
     void scale();
     void RHS_affine();
     void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
+    void scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda);
 };
