@@ -4,9 +4,9 @@
 
 ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
                      const Eigen::SparseMatrix<double> &A,
-                     const Eigen::SparseVector<double> &c,
-                     const Eigen::SparseVector<double> &h,
-                     const Eigen::SparseVector<double> &b,
+                     const Eigen::VectorXd &c,
+                     const Eigen::VectorXd &h,
+                     const Eigen::VectorXd &b,
                      const std::vector<size_t> &soc_dims)
     : G(G), A(A), c(c), h(h), b(b)
 {
@@ -31,7 +31,9 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
  * Returns false as soon as any multiplier or slack leaves the cone,
  * as this indicates severe problems.
  */
-bool ECOSEigen::updateScalings()
+bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
+                               const Eigen::VectorXd &z,
+                               Eigen::VectorXd &lambda)
 {
     /* LP cone */
     lp_cone.w = s.cwiseQuotient(z).cwiseSqrt();
@@ -91,18 +93,18 @@ bool ECOSEigen::updateScalings()
         /* increase offset for next cone */
         k += soc.dim;
     }
-    /* lambda = W*z */
-    scale();
+    /* lambda = W * z */
+    scale(z, lambda);
 
     return true;
 }
 
 /**
  * Fast multiplication by scaling matrix.
- * Returns lambda = W*z
+ * Returns lambda = W * z
  * The exponential variables are not touched.
  */
-void ECOSEigen::scale()
+void ECOSEigen::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
 {
     /* LP cone */
     size_t p = num_pc;
@@ -112,15 +114,15 @@ void ECOSEigen::scale()
     size_t cone_start = num_pc;
     for (SecondOrderCone &soc : so_cones)
     {
-        /* zeta = q'*z1 */
+        /* zeta = q' * z1 */
         double zeta = soc.q.tail(soc.dim - 1).dot(z.segment(cone_start + 1, soc.dim - 1));
 
-        /* factor = z0 + zeta / (1+a); */
+        /* factor = z0 + zeta / (1 + a); */
         double factor = z(cone_start) + zeta / (1. + soc.a);
 
-        /* second pass (on k): write out result */
-        lambda(cone_start) = soc.eta * (soc.a * z(cone_start) + zeta); /* lambda[0] */
-        lambda.segment(cone_start + 1, p - 1) = soc.eta * (z + factor * soc.q.tail(p - 1));
+        /* write out result */
+        lambda(cone_start) = soc.eta * (soc.a * z(cone_start) + zeta);
+        lambda.segment(cone_start + 1, p - 1) = soc.eta * (z + factor * soc.q.head(p - 1));
 
         cone_start += p;
     }
@@ -485,24 +487,266 @@ void ECOSEigen::Solve()
         /* and w_times_dzaff = W * dz_aff */
         /* and dz2 = dz2 + dtau_aff * dz1 will store the unscaled dz */
         dz2 += dtauaff * dz1;
-        // scale(dz2, W_times_dzaff);
+        scale(dz2, W_times_dzaff);
+
+        /* W \ dsaff = -W * dzaff - lambda; */
+        dsaff_by_W = -W_times_dzaff - lambda;
+
+        /* dkapaff = -(bkap + kap * dtauaff) / tau; bkap = kap * tau*/
+        double dkapaff = -kap - kap / tau * dtauaff;
+
+        /* Line search on W \ dsaff and W * dzaff */
+        const double step_affine = lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtauaff, kap, dkapaff);
+
+        /* Centering parameter */
+        double sigma = 1. - step_affine;
+        sigma = sigma * sigma * sigma;
+        sigma = std::clamp(sigma, settings.sigmamax, settings.sigmamin);
+        info.sigma = sigma;
+
+        /* Combined search direction */
+        RHS_combined();
+        solveKKT(rhs2, dx2, dy2, dz2, 0);
+
+        /* bkap = kap * tau + dkapaff * dtauaff - sigma * info.mu; */
+        const double bkap = kap * tau + dkapaff * dtauaff - sigma * info.mu;
+
+        /* dtau = ((1 - sigma) * rt - bkap / tau + c' * x2 + by2 + h' * z2) / dtau_denom; */
+        const double dtau = ((1. - sigma) * rt - bkap / tau + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
+
+        /** 
+         * dx = x2 + dtau*x1
+         * dy = y2 + dtau*y1
+         * dz = z2 + dtau*z1
+         */
+        dx2 += dtau * dx1;
+        dy2 += dtau * dy1;
+        dz2 += dtau * dz1;
+
+        /* ds_by_W = -(lambda \ bs + conelp_timesW(scaling, dz, dims))       */
+        /* Note that at this point w->dsaff_by_W holds already (lambda \ ds) */
+        scale(dz2, W_times_dzaff);
+        dsaff_by_W = -(dsaff_by_W + W_times_dzaff);
+
+        /* dkap = -(bkap + kap * dtau) / tau; */
+        const double dkap = -(bkap + kap * dtau) / tau;
+
+        /* Line search on combined direction */
+        info.step = lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtau, kap, dkap);
+
+        /* Bring ds to the final unscaled form */
+        /* ds = W * ds_by_W */
+        scale(dsaff_by_W, dsaff);
+
+        /* Update variables */
+        x += info.step * dx2;
+        y += info.step * dy2;
+        z += info.step * dz2;
+        s += info.step * dsaff;
+
+        kap += info.step * dkap;
+        tau += info.step * dtau;
+    }
+
+    /* scale variables back */
+    backscale();
+}
+
+/**
+ * Scales variables by 1.0/tau, i.e. computes
+ * x = x./tau, y = y./tau, z = z./tau, s = s./tau
+ */
+void ECOSEigen::backscale()
+{
+    x = x.cwiseQuotient(x_equil * tau);
+    y = y.cwiseQuotient(A_equil * tau);
+    z = z.cwiseQuotient(G_equil * tau);
+    s = s.cwiseQuotient(G_equil * tau);
+    c = c.cwiseProduct(x_equil);
+}
+
+/**
+ * Prepares the RHS for computing the combined search direction.
+ */
+void ECOSEigen::RHS_combined()
+{
+    Eigen::VectorXd ds1(num_ineq);
+    Eigen::VectorXd ds2(num_ineq);
+
+    /* ds = lambda o lambda + W \ s o Wz - sigma * mu * e) */
+    conicProduct(lambda, lambda, ds1);
+    conicProduct(dsaff_by_W, W_times_dzaff, ds2);
+
+    const double sigmamu = info.sigma * info.mu;
+    ds1.head(num_pc) += ds2.head(num_pc);
+    ds1.array() -= sigmamu;
+    size_t k = num_pc;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        ds1(k) += ds2(k) - sigmamu;
+        k++;
+        ds1.segment(k, sc.dim - 1) += ds2.segment(k, sc.dim - 1);
+        k += sc.dim;
+    }
+
+    /* dz = -(1 - sigma) * rz + W * (lambda \ ds) */
+    conicDivision(lambda, ds1, dsaff_by_W);
+    scale(dsaff_by_W, ds1);
+
+    /* copy in RHS */
+    const double one_minus_sigma = 1. - info.sigma;
+    rhs2.head(num_var + num_eq) *= one_minus_sigma;
+    rhs2.segment(num_var + num_eq, num_pc) = -one_minus_sigma * rz.head(num_pc) + ds1.head(num_pc);
+    size_t rhs_index = num_pc;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        rhs2.segment(rhs_index, sc.dim) = -one_minus_sigma * rz.segment(k, sc.dim) + ds1.segment(k, sc.dim);
+        rhs_index += sc.dim;
+        rhs2(rhs_index++) = 0.;
+        rhs2(rhs_index++) = 0.;
+        k += sc.dim;
     }
 }
 
 /**
- * Fast multiplication by scaling matrix.
- * Returns lambda = W*z
- * The exponential variables are not touched.
+ * Conic division, implements the "\" operator, v = u \ w
  */
-void ECOSEigen::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
+void ECOSEigen::conicDivision(const Eigen::VectorXd &u,
+                              const Eigen::VectorXd &w,
+                              Eigen::VectorXd &v)
 {
     /* LP cone */
-    lambda = lp_cone.w.cwiseProduct(z);
+    v.head(num_pc) = w.head(num_pc).cwiseQuotient(u.head(num_pc));
 
     /* Second-order cone */
+    size_t cone_start = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
+        const double u0 = u(cone_start);
+        const double w0 = w(cone_start);
+        const double rho = u0 * u0 - u.segment(cone_start + 1, sc.dim - 1).squaredNorm();
+        const double zeta = u.segment(cone_start + 1, sc.dim - 1).squaredNorm();
+        const double temp = zeta / u0 - w0;
+        const double factor = temp / rho;
+        v(cone_start) = temp / rho;
+        v.segment(cone_start + 1, sc.dim - 1) = factor * u.segment(cone_start + 1, sc.dim - 1) +
+                                                w.segment(cone_start + 1, sc.dim - 1) / u0;
+        cone_start += sc.dim;
     }
+}
+
+void ECOSEigen::conicProduct(const Eigen::VectorXd &u,
+                             const Eigen::VectorXd &v,
+                             Eigen::VectorXd &w)
+{
+    /* LP cone */
+    w.head(num_eq) = u.head(num_eq).cwiseProduct(v.head(num_eq));
+    double mu = w.head(num_eq).lpNorm<1>();
+
+    /* Second-order cone */
+    size_t cone_start = num_eq;
+    size_t k = num_eq;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        const double u0 = u(0);
+        const double v0 = v(0);
+        w(k) = u.segment(cone_start, sc.dim).dot(v.segment(cone_start, sc.dim));
+        mu += std::abs(w(k));
+        k++;
+        w.segment(k, sc.dim - 1) = u0 * v.segment(cone_start + 1, sc.dim - 1) +
+                                   v0 * v.segment(cone_start + 1, sc.dim - 1);
+        k += sc.dim - 1;
+        cone_start += sc.dim;
+    }
+}
+
+double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen::VectorXd &dz,
+                             double tau, double dtau, double kap, double dkap)
+{
+    /* LP cone */
+    double alpha;
+    if (num_eq > 0)
+    {
+        const double rhomin = (ds.head(num_eq).cwiseQuotient(lambda.head(num_eq))).minCoeff();
+        const double sigmamin = (dz.head(num_eq).cwiseQuotient(lambda.head(num_eq))).minCoeff();
+        const double eps = 1e-13;
+        if (-sigmamin > -rhomin)
+        {
+            alpha = sigmamin < 0 ? 1. / (-sigmamin) : 1. / eps;
+        }
+        else
+        {
+            alpha = rhomin < 0 ? 1. / (-rhomin) : 1. / eps;
+        }
+    }
+    else
+    {
+        alpha = 10.;
+    }
+
+    /* tau and kappa */
+    const double minus_tau_by_dtau = -tau / dtau;
+    const double minus_kap_by_dkap = -kap / dkap;
+    if (minus_tau_by_dtau > 0 && minus_tau_by_dtau < alpha)
+    {
+        alpha = minus_tau_by_dtau;
+    }
+    if (minus_kap_by_dkap > 0 && minus_kap_by_dkap < alpha)
+    {
+        alpha = minus_kap_by_dkap;
+    }
+
+    /* Second-order cone */
+    size_t cone_start = num_eq;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        /* Normalize */
+        const double lknorm2 = lambda(cone_start) * lambda(cone_start) - lambda.segment(cone_start + 1, sc.dim - 1).squaredNorm();
+        if (lknorm2 <= 0.)
+            continue;
+
+        const double lknorm = std::sqrt(lknorm2);
+        Eigen::VectorXd lkbar = lambda.segment(cone_start, sc.dim) / lknorm;
+
+        const double lknorminv = 1. / lknorm;
+
+        /* Calculate products */
+        const double lkbar_times_dsk = lkbar(0) * ds(cone_start) - lkbar.segment(1, sc.dim - 1).dot(ds.segment(cone_start + 1, sc.dim - 1));
+        const double lkbar_times_dzk = lkbar(0) * ds(cone_start) - lkbar.segment(1, sc.dim - 1).dot(dz.segment(cone_start + 1, sc.dim - 1));
+
+        /* now construct rhok and sigmak, the first element is different */
+        Eigen::VectorXd rho(sc.dim);
+        rho(0) = lknorminv * lkbar_times_dsk;
+        double factor = (lkbar_times_dsk + ds(cone_start)) / (lkbar(0) + 1.);
+        rho.tail(sc.dim - 1) = lknorminv * (ds.segment(cone_start + 1, sc.dim - 1) - factor * lkbar.segment(1, sc.dim - 1));
+        const double rhonorm = rho.tail(sc.dim - 1).norm() - rho(0);
+
+        Eigen::VectorXd sigma(sc.dim);
+        sigma(0) = lknorminv * lkbar_times_dzk;
+        factor = (lkbar_times_dzk + dz(cone_start)) / (lkbar(0) + 1.);
+        sigma.tail(sc.dim - 1) = lknorminv * (dz.segment(cone_start + 1, sc.dim - 1) - factor * lkbar.segment(1, sc.dim - 1));
+        const double sigmanorm = sigma.tail(sc.dim - 1).norm() - sigma(0);
+
+        /* update alpha */
+        double conic_step = 0.;
+        conic_step = std::max(rhonorm, conic_step);
+        conic_step = std::max(sigmanorm, conic_step);
+
+        if (conic_step != 0.)
+        {
+            if (1. / conic_step < alpha)
+            {
+                alpha = 1. / conic_step;
+            }
+        }
+
+        cone_start += sc.dim;
+    }
+
+    /* saturate between stepmin and stepmax */
+    alpha = std::clamp(alpha, settings.stepmin, settings.stepmax);
+
+    return alpha;
 }
 
 void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K

@@ -18,6 +18,10 @@ struct Settings
     size_t verbose;       // verbosity bool for PRINTLEVEL < 3
     double linsysacc;     // rel. accuracy of search direction
     double irerrfact;     // factor by which IR should reduce err
+    double stepmin;       // smallest step that we do take
+    double stepmax;       // largest step allowed, also in affine dir.
+    double sigmamin;      // always do some centering
+    double sigmamax;      // never fully center
 };
 
 struct Information
@@ -87,9 +91,9 @@ class ECOSEigen
 
     ECOSEigen(const Eigen::SparseMatrix<double> &G,
               const Eigen::SparseMatrix<double> &A,
-              const Eigen::SparseVector<double> &c,
-              const Eigen::SparseVector<double> &h,
-              const Eigen::SparseVector<double> &b,
+              const Eigen::VectorXd &c,
+              const Eigen::VectorXd &h,
+              const Eigen::VectorXd &b,
               const std::vector<size_t> &soc_dims);
 
     void Solve();
@@ -106,9 +110,9 @@ private:
     Eigen::SparseMatrix<double> A;
     Eigen::SparseMatrix<double> At;
     Eigen::SparseMatrix<double> Gt;
-    Eigen::SparseVector<double> c;
-    Eigen::SparseVector<double> h;
-    Eigen::SparseVector<double> b;
+    Eigen::VectorXd c;
+    Eigen::VectorXd h;
+    Eigen::VectorXd b;
 
     Eigen::VectorXd x;      // Primal variables                     size num_var
     Eigen::VectorXd y;      // Multipliers for equality constaints  size num_eq
@@ -124,9 +128,9 @@ private:
     // Norm iterates
     double nx, ny, nz, ns;
 
-    Eigen::SparseVector<double> x_equil;
-    Eigen::SparseMatrix<double> G_equil;
-    Eigen::SparseMatrix<double> A_equil;
+    Eigen::VectorXd x_equil;
+    Eigen::VectorXd G_equil;
+    Eigen::VectorXd A_equil;
 
     size_t num_var;  // Number of variables (n)
     size_t num_eq;   // Number of equality constraints (p)
@@ -147,6 +151,8 @@ private:
     double resx0, resy0, resz0;
     double cx, by, hz;
 
+    Eigen::VectorXd dsaff_by_W, W_times_dzaff, dsaff;
+
     // KKT Matrix
     Eigen::SparseMatrix<double> K;
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
@@ -164,9 +170,25 @@ private:
     void computeResiduals();
     void updateStatistics();
     bool checkExitConditions(bool reduced_accuracy);
-    bool updateScalings();
-    void scale();
+    bool updateScalings(const Eigen::VectorXd &s,
+                        const Eigen::VectorXd &z,
+                        Eigen::VectorXd &lambda);
     void RHS_affine();
+    void RHS_combined();
     void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
     void scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda);
+    double lineSearch(Eigen::VectorXd &lambda,
+                      Eigen::VectorXd &ds,
+                      Eigen::VectorXd &dz,
+                      double tau,
+                      double dtau,
+                      double kap,
+                      double dkap);
+    void conicProduct(const Eigen::VectorXd &u,
+                      const Eigen::VectorXd &v,
+                      Eigen::VectorXd &w);
+    void conicDivision(const Eigen::VectorXd &u,
+                       const Eigen::VectorXd &w,
+                       Eigen::VectorXd &v);
+    void backscale();
 };
