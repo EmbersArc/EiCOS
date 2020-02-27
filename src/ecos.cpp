@@ -10,20 +10,186 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
                      const std::vector<size_t> &soc_dims)
     : G(G), A(A), c(c), h(h), b(b)
 {
-    num_var = A.cols();
+    // Dimensions
+    num_var = std::max(A.cols(), G.cols());
     num_eq = A.rows();
-    num_sc = soc_dims.size();
     num_ineq = G.rows(); // = num_pc + num_sc
+    num_sc = soc_dims.size();
     num_pc = num_ineq - num_sc;
+
+    /**
+     *  Dimension of KKT matrix
+     *   =   # variables
+     *     + # equality constraints
+     *     + # inequality constraints
+     *     + 2 * # second order cones (expansion of SOC scalings)
+     */
     dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
 
+    // Set up LP cone
+    lp_cone.dim = num_eq;
+    lp_cone.v.resize(num_eq);
+    lp_cone.w.resize(num_eq);
+    lp_cone.kkt_idx.resize(num_eq);
+
+    // Set up second-order cone
     so_cones.resize(num_sc);
     for (size_t i = 0; i < num_sc; i++)
     {
-        so_cones[i].dim = soc_dims[i];
+        const size_t conesize = soc_dims[i];
+        SecondOrderCone &c = so_cones[i];
+        c.dim = conesize;
+        c.eta = 0.;
+        c.a = 0.;
+        c.Didx.resize(conesize);
+        c.q.resize(conesize - 1);
+        c.skbar.resize(conesize);
+        c.zkbar.resize(conesize);
     }
 
     setupKKT(G, A);
+}
+
+void equilibrateRows(const Eigen::VectorXd &v, Eigen::SparseMatrix<double> &m)
+{
+    for (int k = 0; k < m.outerSize(); ++k)
+    {
+        for (Eigen::SparseMatrix<double>::InnerIterator it(m, k); it; ++it)
+        {
+            it.valueRef() /= v(it.row());
+        }
+    }
+}
+
+void equilibrateCols(const Eigen::VectorXd &v, Eigen::SparseMatrix<double> &m)
+{
+    for (int k = 0; k < m.cols(); ++k)
+    {
+        m.col(k) /= v(k);
+    }
+}
+
+void ECOSEigen::setEquilibration()
+{
+    x_equil.resize(num_var);
+    A_equil.resize(num_eq);
+    G_equil.resize(num_ineq);
+    Eigen::VectorXd x_tmp, A_tmp, G_tmp;
+    x_tmp.resizeLike(x_equil);
+    A_tmp.resizeLike(A_equil);
+    G_tmp.resizeLike(G_equil);
+
+    x_equil.setOnes();
+    A_equil.setOnes();
+    G_equil.setOnes();
+
+    /* Iterative equilibration */
+    for (size_t iter = 0; iter < settings.equil_iters; iter++)
+    {
+        /* Each iteration updates A and G */
+        /* zero out the temp vectors */
+
+        x_tmp.setZero();
+        A_tmp.setZero();
+        G_tmp.setZero();
+
+        /* Compute norm across columns of A, G */
+        if (num_eq > 0)
+        {
+            for (size_t j = 0; j < num_var; j++)
+            {
+                x_tmp(j) = A.col(j).coeffs().cwiseAbs().maxCoeff();
+            }
+        }
+        for (size_t j = 0; j < num_var; j++)
+        {
+            x_tmp(j) = std::max(x_tmp(j), G.col(j).coeffs().cwiseAbs().maxCoeff());
+        }
+
+        /* Compute norm across rows of A */
+        if (A.size() > 0)
+        {
+            for (size_t j = 0; j < num_var; j++)
+            {
+                A_tmp(j) = At.col(j).coeffs().cwiseAbs().maxCoeff();
+            }
+        }
+
+        /* Compute norm across rows of G */
+        if (G.rows() > 0)
+        {
+            for (size_t j = 0; j < num_var; j++)
+            {
+                G_tmp(j) = Gt.col(j).coeffs().cwiseAbs().maxCoeff();
+            }
+        }
+
+        /* Now collapse cones together by using total over the group */
+        size_t ind = num_eq;
+        for (const SecondOrderCone &sc : so_cones)
+        {
+            const double total = G_tmp.segment(ind, sc.dim).lpNorm<1>();
+            G_tmp.segment(ind, sc.dim).setConstant(total);
+            ind += sc.dim;
+        }
+
+        /* Take the square root */
+        for (size_t i = 0; i < num_var; i++)
+        {
+            x_tmp(i) = std::fabs(x_tmp(i)) < 1e-6 ? 1.0 : std::sqrt(x_tmp(i));
+        }
+        for (size_t i = 0; i < num_eq; i++)
+        {
+            A_tmp(i) = std::fabs(A_tmp(i)) < 1e-6 ? 1.0 : std::sqrt(A_tmp(i));
+        }
+        for (size_t i = 0; i < num_ineq; i++)
+        {
+            G_tmp(i) = std::fabs(G_tmp(i)) < 1e-6 ? 1.0 : std::sqrt(G_tmp(i));
+        }
+
+        /* Equilibrate the matrices */
+        equilibrateRows(A_tmp, A);
+        equilibrateCols(A_tmp, A);
+        equilibrateRows(G_tmp, G);
+        equilibrateCols(G_tmp, G);
+
+        /* update the equilibration matrix */
+        x_equil = x_equil.cwiseProduct(x_tmp);
+        A_equil = A_equil.cwiseProduct(A_tmp);
+        G_equil = G_equil.cwiseProduct(G_tmp);
+    }
+
+    /* The c vector is scaled in the solve function */
+
+    /* Equilibrate the b vector */
+    b = b.cwiseQuotient(A_equil);
+    /* Equilibrate the h vector */
+    h = h.cwiseQuotient(G_equil);
+}
+
+void restore(const Eigen::VectorXd &d, const Eigen::VectorXd &e,
+             Eigen::SparseMatrix<double> &m)
+{
+    for (int k = 0; k < m.outerSize(); ++k)
+    {
+        for (Eigen::SparseMatrix<double>::InnerIterator it(m, k); it; ++it)
+        {
+            it.valueRef() *= d(it.row()) * e(it.col());
+        }
+    }
+}
+
+void ECOSEigen::unsetEquilibration()
+{
+    restore(A_equil, x_equil, A);
+    restore(G_equil, x_equil, G);
+
+    /* The c vector is unequilibrated in the solve function */
+
+    /* Unequilibrate the b vector */
+    b = b.cwiseProduct(A_equil);
+    /* Unequilibrate the h vector */
+    h = h.cwiseProduct(G_equil);
 }
 
 /**
@@ -40,11 +206,11 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
 
     /* Second-order cone */
     size_t k = num_pc;
-    for (SecondOrderCone soc : so_cones)
+    for (SecondOrderCone &sc : so_cones)
     {
         /* check residuals and quit if they're negative */
-        const double sres = s(k) * s(k) - s.segment(k + 1, soc.dim - 1).squaredNorm();
-        const double zres = z(k) * z(k) - z.segment(k + 1, soc.dim - 1).squaredNorm();
+        const double sres = s(k) * s(k) - s.segment(k + 1, sc.dim - 1).squaredNorm();
+        const double zres = z(k) * z(k) - z.segment(k + 1, sc.dim - 1).squaredNorm();
         if (sres <= 0 or zres <= 0)
         {
             return false;
@@ -54,11 +220,11 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         double snorm = std::sqrt(sres);
         double znorm = std::sqrt(zres);
 
-        const Eigen::VectorXd skbar = s.segment(num_pc, soc.dim) / snorm;
-        const Eigen::VectorXd zkbar = z.segment(num_pc, soc.dim) / znorm;
+        const Eigen::VectorXd skbar = s.segment(num_pc, sc.dim) / snorm;
+        const Eigen::VectorXd zkbar = z.segment(num_pc, sc.dim) / znorm;
 
-        soc.eta_square = snorm / znorm;
-        soc.eta = std::sqrt(soc.eta_square);
+        sc.eta_square = snorm / znorm;
+        sc.eta = std::sqrt(sc.eta_square);
 
         /* Normalized Nesterov-Todd scaling point */
         double gamma = 1.;
@@ -66,7 +232,7 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         gamma = std::sqrt(0.5 * gamma);
 
         double a = (0.5 / gamma) * (skbar(0) + zkbar(0));
-        Eigen::VectorXd q = (0.5 / gamma) * (skbar.tail(soc.dim - 1) - zkbar.tail(soc.dim - 1));
+        Eigen::VectorXd q = (0.5 / gamma) * (skbar.tail(sc.dim - 1) - zkbar.tail(sc.dim - 1));
         double w = q.squaredNorm();
 
         /* Pre-compute variables needed for KKT matrix (kkt_update uses those) */
@@ -75,7 +241,7 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         double d = 1. + 2. / (1. + a) + w / ((1. + a) * (1. + a));
 
         double d1 = std::max(0., 0.5 * (a * a + w * (1.0 - (c * c) / (1. + w * d))));
-        double u0_square = a * a + w - soc.d1;
+        double u0_square = a * a + w - sc.d1;
         double u0 = std::sqrt(u0_square);
 
         double c2byu02 = (c * c) / u0_square;
@@ -85,13 +251,13 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
             return false;
         }
 
-        soc.v1 = std::sqrt(c2byu02_d);
-        soc.u1 = std::sqrt(c2byu02);
-        soc.d1 = d1;
-        soc.u0 = u0;
+        sc.v1 = std::sqrt(c2byu02_d);
+        sc.u1 = std::sqrt(c2byu02);
+        sc.d1 = d1;
+        sc.u0 = u0;
 
         /* increase offset for next cone */
-        k += soc.dim;
+        k += sc.dim;
     }
     /* lambda = W * z */
     scale(z, lambda);
@@ -107,24 +273,23 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
 void ECOSEigen::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
 {
     /* LP cone */
-    size_t p = num_pc;
-    lambda.head(p) = lp_cone.w.head(p).cwiseProduct(z.head(p));
+    lambda.head(num_pc) = lp_cone.w.head(num_pc).cwiseProduct(z.head(num_pc));
 
     /* Second-order cone */
     size_t cone_start = num_pc;
-    for (SecondOrderCone &soc : so_cones)
+    for (const SecondOrderCone &sc : so_cones)
     {
         /* zeta = q' * z1 */
-        double zeta = soc.q.tail(soc.dim - 1).dot(z.segment(cone_start + 1, soc.dim - 1));
+        double zeta = sc.q.tail(sc.dim - 1).dot(z.segment(cone_start + 1, sc.dim - 1));
 
         /* factor = z0 + zeta / (1 + a); */
-        double factor = z(cone_start) + zeta / (1. + soc.a);
+        double factor = z(cone_start) + zeta / (1. + sc.a);
 
         /* write out result */
-        lambda(cone_start) = soc.eta * (soc.a * z(cone_start) + zeta);
-        lambda.segment(cone_start + 1, p - 1) = soc.eta * (z + factor * soc.q.head(p - 1));
+        lambda(cone_start) = sc.eta * (sc.a * z(cone_start) + zeta);
+        lambda.segment(cone_start + 1, sc.dim - 1) = sc.eta * (z + factor * sc.q.head(sc.dim - 1));
 
-        cone_start += p;
+        cone_start += sc.dim;
     }
 }
 
@@ -1012,9 +1177,10 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
     At = A.transpose();
     Gt = G.transpose();
 
+    // Number of non-zeros in KKT matrix
     size_t K_nonzeros = At.nonZeros() + Gt.nonZeros();
-    // Static Regularization
-    K_nonzeros += num_var + num_eq;
+    // // Static Regularization
+    // // K_nonzeros += num_var + num_eq;
     // Positive part of scaling block V
     K_nonzeros += num_pc;
     for (const SecondOrderCone &sc : so_cones)
@@ -1027,17 +1193,17 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
     std::vector<Eigen::Triplet<double>> K_triplets;
     K_triplets.reserve(K_nonzeros);
 
-    // Static Regularization of blocks (1,1) and (2,2)
-    for (size_t k = 0; k < num_var; k++)
-    {
-        K_triplets.emplace_back(k, k, settings.delta);
-    }
-    for (size_t k = 0; k < num_eq; k++)
-    {
-        K_triplets.emplace_back(num_var + k, num_var + k, -settings.delta);
-    }
+    // // Static Regularization of blocks (1,1) and (2,2)
+    // // for (size_t k = 0; k < num_var; k++)
+    // // {
+    // //     K_triplets.emplace_back(k, k, settings.delta);
+    // // }
+    // // for (size_t k = 0; k < num_eq; k++)
+    // // {
+    // //     K_triplets.emplace_back(num_var + k, num_var + k, -settings.delta);
+    // // }
 
-    // A'
+    // A' (1,2)
     for (int k = 0; k < At.outerSize(); k++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
@@ -1046,7 +1212,7 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
         }
     }
 
-    // G'
+    // G' (1,3)
     {
         // Linear block
         Eigen::SparseMatrix<double> Gt_block;
@@ -1079,7 +1245,7 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
         }
     }
 
-    // -V
+    // -V (3,3)
     {
         size_t row_col = A.cols() + At.cols();
 
@@ -1108,12 +1274,14 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
          **/
         for (const SecondOrderCone &sc : so_cones)
         {
+            // D
             for (size_t k = 0; k < sc.dim; k++)
             {
                 K_triplets.emplace_back(row_col, row_col, -1.);
                 row_col++;
             }
 
+            // -1 on diagonal
             row_col++;
             K_triplets.emplace_back(row_col, row_col, -1.);
 
@@ -1123,6 +1291,7 @@ void ECOSEigen::setupKKT(const Eigen::SparseMatrix<double> &G,
                 K_triplets.emplace_back(row_col - sc.dim + k, row_col, -1.);
             }
 
+            // 1 on diagonal
             row_col++;
             K_triplets.emplace_back(row_col, row_col, 1.);
 

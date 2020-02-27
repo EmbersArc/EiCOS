@@ -4,24 +4,25 @@
 
 struct Settings
 {
-    double gamma;         // scaling the final step length
-    double delta;         // regularization parameter
-    double eps;           // regularization threshold
-    double feastol;       // primal/dual infeasibility tolerance
-    double abstol;        // absolute tolerance on duality gap
-    double reltol;        // relative tolerance on duality gap
-    double feastol_inacc; // primal/dual infeasibility relaxed tolerance
-    double abstol_inacc;  // absolute relaxed tolerance on duality gap
-    double reltol_inacc;  // relative relaxed tolerance on duality gap
-    size_t nitref;        // number of iterative refinement steps
-    size_t maxit;         // maximum number of iterations
-    size_t verbose;       // verbosity bool for PRINTLEVEL < 3
-    double linsysacc;     // rel. accuracy of search direction
-    double irerrfact;     // factor by which IR should reduce err
-    double stepmin;       // smallest step that we do take
-    double stepmax;       // largest step allowed, also in affine dir.
-    double sigmamin;      // always do some centering
-    double sigmamax;      // never fully center
+    const double gamma = 0.99;         // scaling the final step length
+    const double delta = 2e-7;         // regularization parameter
+    const double eps = 1e13;           // regularization threshold
+    const double feastol = 1e-8;       // primal/dual infeasibility tolerance
+    const double abstol = 1e-8;        // absolute tolerance on duality gap
+    const double reltol = 1e-8;        // relative tolerance on duality gap
+    const double feastol_inacc = 1e-4; // primal/dual infeasibility relaxed tolerance
+    const double abstol_inacc = 5e-5;  // absolute relaxed tolerance on duality gap
+    const double reltol_inacc = 5e-5;  // relative relaxed tolerance on duality gap
+    const size_t nitref = 9;           // number of iterative refinement steps
+    const size_t maxit = 100;          // maximum number of iterations
+    const bool verbose = true;         // verbosity bool for PRINTLEVEL < 3
+    const double linsysacc = 1e-14;    // rel. accuracy of search direction
+    const double irerrfact = 6;        // factor by which IR should reduce err
+    const double stepmin = 1e-6;       // smallest step that we do take
+    const double stepmax = 0.999;      // largest step allowed, also in affine dir.
+    const double sigmamin = 1e-4;      // always do some centering
+    const double sigmamax = 1.;        // never fully center
+    const size_t equil_iters = 3;
 };
 
 struct Information
@@ -69,8 +70,8 @@ struct SecondOrderCone
     Eigen::VectorXd q;     // = wbar(2:end)
     Eigen::VectorXi Didx;  // indices for D
     double u0;             // eta
-    double u1;             // u = [u0; u1*q]
-    double v1;             // v = [0; v1*q]
+    double u1;             // u = [u0; u1 * q]
+    double v1;             // v = [0; v1 * q]
 };
 
 class ECOSEigen
@@ -128,9 +129,9 @@ private:
     // Norm iterates
     double nx, ny, nz, ns;
 
-    Eigen::VectorXd x_equil;
-    Eigen::VectorXd G_equil;
-    Eigen::VectorXd A_equil;
+    Eigen::VectorXd x_equil; // Equilibration vector of size n
+    Eigen::VectorXd A_equil; // Equilibration vector of size num_eq
+    Eigen::VectorXd G_equil; // Equilibration vector of size num_ineq
 
     size_t num_var;  // Number of variables (n)
     size_t num_eq;   // Number of equality constraints (p)
@@ -191,4 +192,6 @@ private:
                        const Eigen::VectorXd &w,
                        Eigen::VectorXd &v);
     void backscale();
+    void setEquilibration();
+    void unsetEquilibration();
 };
