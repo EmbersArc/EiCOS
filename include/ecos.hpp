@@ -31,8 +31,8 @@ struct Information
     double dcost;
     double pres;
     double dres;
-    double pinf;
-    double dinf;
+    bool pinf;
+    bool dinf;
     std::optional<double> pinfres;
     std::optional<double> dinfres;
     double gap;
@@ -51,7 +51,6 @@ struct Information
 
 struct PositiveCone
 {
-    size_t dim;
     Eigen::VectorXd w;
     Eigen::VectorXd v;
     Eigen::VectorXi kkt_idx;
@@ -121,8 +120,9 @@ private:
     Eigen::VectorXd s;      // Slacks for conic inequalities        size num_ineq
     Eigen::VectorXd lambda; // Scaled variable                      size num_ineq
 
-    // Residuals
-    Eigen::VectorXd rx, ry, rz; // sizes num_var, num_eq, num_ineq
+    Eigen::VectorXd rx; // Residual size num_var
+    Eigen::VectorXd ry; // Residual size num_eq
+    Eigen::VectorXd rz; // Residual size num_ineq
     double hresx, hresy, hresz;
     double rt;
 
@@ -139,7 +139,6 @@ private:
     size_t num_pc;   // Number of positive constraints (l)
     size_t num_sc;   // Number of second order cone constraints (ncones)
     size_t dim_K;    // Dimension of KKT matrix
-    size_t D;        // Degree of the cone
 
     Eigen::VectorXd rhs1, rhs2; // The two right hand sides in the KKT equations.
 
@@ -148,7 +147,6 @@ private:
     double tau; // tau
 
     // The problem data scaling parameters
-    double scale_rx, scale_ry, scale_rz;
     double resx0, resy0, resz0;
     double cx, by, hz;
 
@@ -159,15 +157,14 @@ private:
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
     LDLT_t ldlt;
 
-    void setupKKT(const Eigen::SparseMatrix<double> &G,
-                  const Eigen::SparseMatrix<double> &A);
+    void setupKKT();
     void updateKKT();
     void solveKKT(const Eigen::VectorXd &rhs,
                   Eigen::VectorXd &dx,
                   Eigen::VectorXd &dy,
                   Eigen::VectorXd &dz,
                   bool initialize);
-    void bringToCone(Eigen::VectorXd &x);
+    void bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s);
     void computeResiduals();
     void updateStatistics();
     bool checkExitConditions(bool reduced_accuracy);
@@ -176,7 +173,8 @@ private:
                         Eigen::VectorXd &lambda);
     void RHS_affine();
     void RHS_combined();
-    void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
+    void scale2add1(const Eigen::VectorXd &x, Eigen::VectorXd &y);
+    void scale2add2(const Eigen::VectorXd &x, Eigen::VectorXd &y);
     void scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda);
     double lineSearch(Eigen::VectorXd &lambda,
                       Eigen::VectorXd &ds,
@@ -185,9 +183,9 @@ private:
                       double dtau,
                       double kap,
                       double dkap);
-    void conicProduct(const Eigen::VectorXd &u,
-                      const Eigen::VectorXd &v,
-                      Eigen::VectorXd &w);
+    double conicProduct(const Eigen::VectorXd &u,
+                        const Eigen::VectorXd &v,
+                        Eigen::VectorXd &w);
     void conicDivision(const Eigen::VectorXd &u,
                        const Eigen::VectorXd &w,
                        Eigen::VectorXd &v);
