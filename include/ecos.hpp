@@ -51,8 +51,8 @@ struct Information
 
 struct PositiveCone
 {
-    Eigen::VectorXd w;
-    Eigen::VectorXd v;
+    Eigen::VectorXd w; // size num_pc
+    Eigen::VectorXd v; // size num_pc
     Eigen::VectorXi kkt_idx;
 };
 
@@ -89,14 +89,16 @@ class ECOSEigen
     // h(m):    Generalized inequality vector.
     // c(n):    Variable weights.
 
+public:
     ECOSEigen(const Eigen::SparseMatrix<double> &G,
               const Eigen::SparseMatrix<double> &A,
               const Eigen::VectorXd &c,
               const Eigen::VectorXd &h,
               const Eigen::VectorXd &b,
-              const std::vector<size_t> &soc_dims);
+              const Eigen::VectorXi &soc_dims);
 
     void Solve();
+    Eigen::VectorXd x; // Primal variables                     size num_var
 
 private:
     PositiveCone lp_cone;
@@ -106,15 +108,14 @@ private:
 
     size_t iteration;
 
-    Eigen::SparseMatrix<double> G;
-    Eigen::SparseMatrix<double> A;
-    Eigen::SparseMatrix<double> At;
-    Eigen::SparseMatrix<double> Gt;
+    Eigen::SparseMatrix<double, Eigen::ColMajor> G;
+    Eigen::SparseMatrix<double, Eigen::ColMajor> A;
+    Eigen::SparseMatrix<double, Eigen::ColMajor> At;
+    Eigen::SparseMatrix<double, Eigen::ColMajor> Gt;
     Eigen::VectorXd c;
     Eigen::VectorXd h;
     Eigen::VectorXd b;
 
-    Eigen::VectorXd x;      // Primal variables                     size num_var
     Eigen::VectorXd y;      // Multipliers for equality constaints  size num_eq
     Eigen::VectorXd z;      // Multipliers for conic inequalities   size num_ineq
     Eigen::VectorXd s;      // Slacks for conic inequalities        size num_ineq

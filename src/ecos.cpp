@@ -1,13 +1,14 @@
 #include "ecos.hpp"
 
 #include <Eigen/SparseCholesky>
+#include <iostream>
 
 ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
                      const Eigen::SparseMatrix<double> &A,
                      const Eigen::VectorXd &c,
                      const Eigen::VectorXd &h,
                      const Eigen::VectorXd &b,
-                     const std::vector<size_t> &soc_dims)
+                     const Eigen::VectorXi &soc_dims)
     : G(G), A(A), c(c), h(h), b(b)
 {
     // Dimensions
@@ -17,9 +18,9 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     }
     num_var = std::max(A.cols(), G.cols());
     num_eq = A.rows();
-    num_ineq = G.rows(); // = num_pc + num_sc
+    num_ineq = G.rows();
     num_sc = soc_dims.size();
-    num_pc = num_ineq - num_sc;
+    num_pc = num_ineq - soc_dims.sum();
 
     /**
      *  Dimension of KKT matrix
@@ -39,7 +40,7 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     so_cones.resize(num_sc);
     for (size_t i = 0; i < num_sc; i++)
     {
-        const size_t conesize = soc_dims[i];
+        const size_t conesize = soc_dims(i);
         SecondOrderCone &c = so_cones[i];
         c.dim = conesize;
         c.eta = 0.;
@@ -70,6 +71,8 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     Gt = G.transpose();
 
     setupKKT();
+
+    setEquilibration();
 }
 
 void equilibrateRows(const Eigen::VectorXd &v, Eigen::SparseMatrix<double> &m)
@@ -87,7 +90,8 @@ void equilibrateCols(const Eigen::VectorXd &v, Eigen::SparseMatrix<double> &m)
 {
     for (int k = 0; k < m.cols(); ++k)
     {
-        m.col(k) /= v(k);
+        if (m.col(k).coeffs().size() > 0)
+            m.col(k) /= v(k);
     }
 }
 
@@ -95,7 +99,8 @@ void maxCols(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
 {
     for (int j = 0; j < m.cols(); j++)
     {
-        e(j) = std::max(e(j), m.col(j).coeffs().cwiseAbs().maxCoeff());
+        if (m.col(j).coeffs().size() > 0)
+            e(j) = std::max(e(j), m.col(j).coeffs().cwiseAbs().maxCoeff());
     }
 }
 
@@ -158,9 +163,9 @@ void ECOSEigen::setEquilibration()
 
         /* Equilibrate the matrices */
         equilibrateRows(A_tmp, A);
-        equilibrateCols(A_tmp, A);
         equilibrateRows(G_tmp, G);
-        equilibrateCols(G_tmp, G);
+        equilibrateCols(x_tmp, A);
+        equilibrateCols(x_tmp, G);
 
         /* update the equilibration matrix */
         x_equil = x_equil.cwiseProduct(x_tmp);
@@ -211,7 +216,7 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
                                Eigen::VectorXd &lambda)
 {
     /* LP cone */
-    lp_cone.v = s.cwiseQuotient(z).cwiseSqrt();
+    lp_cone.v = s.head(num_pc).cwiseQuotient(z.head(num_pc)).cwiseSqrt();
     lp_cone.w = lp_cone.v.cwiseSqrt();
 
     /* Second-order cone */
@@ -445,6 +450,7 @@ void ECOSEigen::updateStatistics()
     else
     {
         // relgap is NaN
+        std::cout << "relgap is NaN" << std::endl;
         std::exit(-1);
     }
 
@@ -592,6 +598,9 @@ void ECOSEigen::Solve()
     Eigen::VectorXd dz1(num_ineq);
     solveKKT(rhs1, dx1, dy1, dz1, true);
 
+    /* Copy out initial value of x */
+    x = dx1;
+
     /* Copy out -r and bring to cone */
     bringToCone(-dz1, s);
 
@@ -632,6 +641,15 @@ void ECOSEigen::Solve()
     * [ h ]    [ h ] 
     **/
     rhs1.head(num_var) = -c;
+
+    /* other variables */
+    kap = 1.,
+    tau = 1.,
+
+    info.step = 0;
+    info.step_aff = 0;
+    info.pinf = false;
+    info.dinf = false;
 
     bool done = false;
     for (iteration = 0; iteration < info.iter_max; iteration++)
@@ -1137,9 +1155,9 @@ void ECOSEigen::scale2add2(const Eigen::VectorXd &x, Eigen::VectorXd &y)
         /* y2 += x2 + v1 * q * x3 + u1 * q * x4 */
         const double v1x3_plus_u1x4 = sc.v1 * x(i3) + sc.u1 * x(i4);
         y.segment(i2, sc.dim - 1) += sc.eta_square * (x.segment(i2, sc.dim - 1) +
-                                                      v1x3_plus_u1x4 * sc.q.segment(i2, sc.dim - 1));
+                                                      v1x3_plus_u1x4 * sc.q);
 
-        const double qtx2 = sc.q.segment(i2, sc.dim - 1).dot(x.segment(i2, sc.dim - 1));
+        const double qtx2 = sc.q.dot(x.segment(i2, sc.dim - 1));
 
         /* y3 += v1 * q' * x2 + x3 */
         y(i3) += sc.eta_square * (sc.v1 * qtx2 + x(i3));
@@ -1188,37 +1206,37 @@ void ECOSEigen::updateKKT()
     }
 
     /* Second-order cone */
-    size_t i_diag = num_pc;
+    size_t diag_idx = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
-        K.coeffRef(i_diag, i_diag) = -sc.eta_square * sc.d1 - settings.delta;
+        K.coeffRef(diag_idx, diag_idx) = -sc.eta_square * sc.d1 - settings.delta;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            i_diag++;
-            K.coeffRef(i_diag, i_diag) = -sc.eta_square - settings.delta;
+            diag_idx++;
+            K.coeffRef(diag_idx, diag_idx) = -sc.eta_square - settings.delta;
         }
 
         /* v */
-        i_diag++;
+        diag_idx++;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(i_diag - sc.dim + k, i_diag) = -sc.eta_square * sc.v1 * sc.q(k - 1);
+            K.coeffRef(diag_idx - sc.dim + k, diag_idx) = -sc.eta_square * sc.v1 * sc.q(k - 1);
         }
 
         /* diagonal */
-        K.coeffRef(i_diag, i_diag) = -sc.eta_square;
+        K.coeffRef(diag_idx, diag_idx) = -sc.eta_square;
 
         /* u */
-        i_diag++;
-        K.coeffRef(i_diag - sc.dim - 1, i_diag) = -sc.eta_square * sc.u0;
+        diag_idx++;
+        K.coeffRef(diag_idx - sc.dim - 1, diag_idx) = -sc.eta_square * sc.u0;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(i_diag - sc.dim - 1 + k, i_diag) = -sc.eta_square * sc.u1 * sc.q(k - 1);
+            K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx) = -sc.eta_square * sc.u1 * sc.q(k - 1);
         }
 
         /* diagonal */
-        K.coeffRef(i_diag, i_diag) = sc.eta_square + settings.delta;
+        K.coeffRef(diag_idx, diag_idx) = sc.eta_square + settings.delta;
     }
 
     ldlt.factorize(K);
@@ -1265,13 +1283,12 @@ void ECOSEigen::setupKKT()
     // G' (1,3)
     {
         // Linear block
-        size_t col_K = A.cols() + At.cols();
-
+        size_t col_K = num_var + num_eq;
         {
-            const Eigen::SparseMatrix<double> Gt_block = Gt.leftCols(num_pc);
+            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
             for (int k = 0; k < Gt_block.outerSize(); k++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
                 {
                     K_triplets.emplace_back(it.row(), col_K + it.col(), it.value());
                 }
@@ -1283,7 +1300,7 @@ void ECOSEigen::setupKKT()
         size_t col_Gt = num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
-            const Eigen::SparseMatrix<double> Gt_block = Gt.middleCols(col_Gt, sc.dim);
+            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
             for (int k = 0; k < Gt_block.outerSize(); k++)
             {
                 for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
@@ -1298,7 +1315,7 @@ void ECOSEigen::setupKKT()
 
     // -V (3,3)
     {
-        size_t diag_idx = A.cols() + At.cols();
+        size_t diag_idx = num_var + num_eq;
 
         // First identity block
         for (size_t k = 0; k < num_pc; k++)
@@ -1333,7 +1350,6 @@ void ECOSEigen::setupKKT()
             }
 
             // -1 on diagonal
-            diag_idx++;
             K_triplets.emplace_back(diag_idx, diag_idx, -1.);
 
             // -v
@@ -1341,9 +1357,9 @@ void ECOSEigen::setupKKT()
             {
                 K_triplets.emplace_back(diag_idx - sc.dim + k, diag_idx, -1.);
             }
+            diag_idx++;
 
             // 1 on diagonal
-            diag_idx++;
             K_triplets.emplace_back(diag_idx, diag_idx, 1.);
 
             // -u
@@ -1351,9 +1367,12 @@ void ECOSEigen::setupKKT()
             {
                 K_triplets.emplace_back(diag_idx - sc.dim - 1 + k, diag_idx, -1.);
             }
+            diag_idx++;
         }
+        assert(diag_idx == dim_K);
     }
 
+    assert(size_t(K_triplets.size()) == K_nonzeros);
     K.setFromTriplets(K_triplets.begin(), K_triplets.end());
     assert(size_t(K.nonZeros()) == K_nonzeros);
 }
