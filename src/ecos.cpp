@@ -1065,7 +1065,7 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     Eigen::SparseMatrix<double> Gt = G.transpose();
     Eigen::SparseMatrix<double> At = A.transpose();
 
-    const double error_threshold = (1. + rhs.lpNorm<1>()) * settings.linsysacc;
+    const double error_threshold = (1. + rhs.lpNorm<Eigen::Infinity>()) * settings.linsysacc;
 
     double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
     Eigen::VectorXd dx_ref(num_var);                       // Refinement vector
@@ -1080,13 +1080,13 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     fmt::print("    --------------------------------------------------\n");
 
     /* Iterative refinement */
-    for (size_t kItRef = 0; kItRef <= settings.nitref; kItRef++)
+    for (size_t k_ref = 0; k_ref <= settings.nitref; k_ref++)
     {
         /* Copy solution into arrays */
         dx = x.head(num_var);
         dy = x.segment(num_var, num_eq);
         dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
-        size_t dz_index = 0;
+        size_t dz_index = num_pc;
         size_t x_index = num_var + num_eq + num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
@@ -1094,19 +1094,19 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
             dz_index += sc.dim;
             x_index += sc.dim + 2;
         }
+        assert(dz_index == num_ineq and x_index == dim_K);
 
         /* Compute error term */
 
         /* Error on dx */
         /* ex = bx - A' * dy - G' * dz */
-        Eigen::VectorXd ex = bx;
+        Eigen::VectorXd ex = bx - Gt * dz;
         if (num_eq > 0)
         {
             ex -= At * dy;
         }
-        ex -= Gt * dz;
-        ex -= settings.delta * dx;
-        const double nex = ex.lpNorm<1>();
+        ex -= settings.deltastat * dx;
+        const double nex = ex.lpNorm<Eigen::Infinity>();
 
         /* Error on dy */
         /* ey = by - A * dx */
@@ -1116,49 +1116,51 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         {
             ey -= A * dx;
         }
-        ey += settings.delta * dy;
-        const double ney = ey.lpNorm<1>();
+        ey += settings.deltastat * dy;
+        const double ney = ey.lpNorm<Eigen::Infinity>();
 
         /* Error on ez */
         /* ez = bz - G * dx + V * dz_true */
         Eigen::VectorXd ez(mtilde);
         const Eigen::VectorXd Gdx = G * dx;
-        ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc);
+
+        ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc) +
+                          settings.deltastat * dz.head(num_pc);
+
         size_t ez_index = num_pc;
-        size_t dx_index = num_pc;
-        dz_index = 0;
+        size_t Gdx_index = num_pc;
+        dz_index = num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
             ez.segment(ez_index, sc.dim) = bz.segment(ez_index, sc.dim) -
-                                           Gdx.segment(dx_index, sc.dim);
+                                           Gdx.segment(Gdx_index, sc.dim);
+            Gdx_index += sc.dim;
 
             // According to ECOS:
             // Is this correct?
-            ez.segment(ez_index, sc.dim - 1) += settings.delta * dz.segment(dz_index, sc.dim - 1);
+            ez.segment(ez_index, sc.dim - 1) += settings.deltastat * dz.segment(dz_index, sc.dim - 1);
             dz_index += sc.dim - 1;
-            ez(ez_index + sc.dim - 1) -= settings.delta * dz(dz_index);
+            ez(ez_index + sc.dim - 1) -= settings.deltastat * dz(dz_index);
             dz_index++;
 
-            dx_index += sc.dim;
             ez_index += sc.dim;
-            ez.segment(ez_index, 2).setZero();
-            ez_index += 2;
+            ez(ez_index++) = 0.;
+            ez(ez_index++) = 0.;
         }
+        assert(ez_index == mtilde and dz_index == num_ineq and Gdx_index == num_ineq);
 
-        const Eigen::VectorXd truez = x.segment(num_var + num_eq, mtilde);
-
+        const Eigen::VectorXd dz_true = x.segment(num_var + num_eq, mtilde);
         if (initialize)
         {
-            scale2add2(truez, ez);
+            scale2add2(dz_true, ez);
         }
         else
         {
-            ez += truez;
+            ez += dz_true;
         }
+        const double nez = ez.lpNorm<Eigen::Infinity>();
 
-        const double nez = ez.lpNorm<1>();
-
-        fmt::print("     {}   {}       {}       {}                  \n", kItRef, nex, ney, nez);
+        fmt::print("     {}   {:.1g}    {:.1g}    {:.1g} \n", k_ref, nex, ney, nez);
 
         /* maximum error (infinity norm of e) */
         double nerr = std::max(nex, nez);
@@ -1169,18 +1171,18 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         }
 
         /* Check whether refinement brought decrease */
-        if (kItRef > 0 && nerr > nerr_prev)
+        if (k_ref > 0 and nerr > nerr_prev)
         {
             /* If not, undo and quit */
             x -= dx_ref;
-            kItRef--;
+            k_ref--;
             break;
         }
 
         /* Check whether to stop refining */
-        if (kItRef == settings.nitref or
+        if (k_ref == settings.nitref or
             (nerr < error_threshold) or
-            (kItRef > 0 and nerr_prev < settings.irerrfact * nerr))
+            (k_ref > 0 and nerr_prev < settings.irerrfact * nerr))
         {
             break;
         }
@@ -1199,7 +1201,7 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     dx = x.head(num_var);
     dy = x.segment(num_var, num_eq);
     dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
-    size_t dz_index = 0;
+    size_t dz_index = num_pc;
     size_t x_index = num_var + num_eq + num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
@@ -1324,26 +1326,28 @@ void ECOSEigen::updateKKT()
     // TODO: Faster element access.
 
     /* LP cone */
-    for (size_t i = 0; i < num_pc; i++)
+    size_t diag_idx = num_var + num_eq;
+    for (size_t k = 0; k < num_pc; k++)
     {
-        K.coeffRef(i, i) = -lp_cone.v(i) - settings.deltastat;
+        K.coeffRef(diag_idx, diag_idx) = -lp_cone.v(k) - settings.deltastat;
+        diag_idx++;
     }
 
     /* Second-order cone */
-    size_t diag_idx = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
         K.coeffRef(diag_idx, diag_idx) = -sc.eta_square * sc.d1 - settings.deltastat;
+        diag_idx++;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            diag_idx++;
             K.coeffRef(diag_idx, diag_idx) = -sc.eta_square - settings.deltastat;
+            diag_idx++;
         }
 
-        diag_idx++;
         /* diagonal */
         K.coeffRef(diag_idx, diag_idx) = -sc.eta_square;
+
         /* v */
         for (size_t k = 1; k < sc.dim; k++)
         {
@@ -1353,13 +1357,17 @@ void ECOSEigen::updateKKT()
         diag_idx++;
         /* diagonal */
         K.coeffRef(diag_idx, diag_idx) = sc.eta_square + settings.deltastat;
+
         /* u */
         K.coeffRef(diag_idx - sc.dim - 1, diag_idx) = -sc.eta_square * sc.u0;
         for (size_t k = 1; k < sc.dim; k++)
         {
             K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx) = -sc.eta_square * sc.u1 * sc.q(k - 1);
         }
+        diag_idx++;
     }
+    assert(diag_idx == dim_K);
+    assert(K.isCompressed());
 
     ldlt.factorize(K);
     if (ldlt.info() != Eigen::Success)
