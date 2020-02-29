@@ -1,7 +1,8 @@
 #include "ecos.hpp"
 #include "data.hpp"
 
-#include <iostream>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 int main()
 {
@@ -16,8 +17,8 @@ int main()
 
     ECOSEigen solver(G, A, c, h, b, soc_dims);
 
-    solver.Solve();
-    
-    std::cout << "Done." << std::endl;
-    std::cout << solver.x << std::endl;
+    solver.solve();
+
+    fmt::print("\nDone.\n");
+    fmt::print("{}\n", solver.x);
 }

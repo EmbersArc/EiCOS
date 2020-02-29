@@ -6,6 +6,7 @@ struct Settings
 {
     const double gamma = 0.99;         // scaling the final step length
     const double delta = 2e-7;         // regularization parameter
+    const double deltastat = 7e-8;     // static regularization parameter
     const double eps = 1e13;           // regularization threshold
     const double feastol = 1e-8;       // primal/dual infeasibility tolerance
     const double abstol = 1e-8;        // absolute tolerance on duality gap
@@ -97,8 +98,8 @@ public:
               const Eigen::VectorXd &b,
               const Eigen::VectorXi &soc_dims);
 
-    void Solve();
-    Eigen::VectorXd x; // Primal variables                     size num_var
+    void solve();
+    Eigen::VectorXd x; // Primal variables  size num_var
 
 private:
     PositiveCone lp_cone;
@@ -108,10 +109,8 @@ private:
 
     size_t iteration;
 
-    Eigen::SparseMatrix<double, Eigen::ColMajor> G;
-    Eigen::SparseMatrix<double, Eigen::ColMajor> A;
-    Eigen::SparseMatrix<double, Eigen::ColMajor> At;
-    Eigen::SparseMatrix<double, Eigen::ColMajor> Gt;
+    Eigen::SparseMatrix<double> G;
+    Eigen::SparseMatrix<double> A;
     Eigen::VectorXd c;
     Eigen::VectorXd h;
     Eigen::VectorXd b;
@@ -141,7 +140,8 @@ private:
     size_t num_sc;   // Number of second order cone constraints (ncones)
     size_t dim_K;    // Dimension of KKT matrix
 
-    Eigen::VectorXd rhs1, rhs2; // The two right hand sides in the KKT equations.
+    Eigen::VectorXd rhs1; // The right hand side in the first KKT equation.
+    Eigen::VectorXd rhs2; // The right hand side in the second KKT equation.
 
     // Homogeneous embedding
     double kap; // kappa
@@ -159,12 +159,14 @@ private:
     LDLT_t ldlt;
 
     void setupKKT();
+    void initKKT();
     void updateKKT();
     void solveKKT(const Eigen::VectorXd &rhs,
                   Eigen::VectorXd &dx,
                   Eigen::VectorXd &dy,
                   Eigen::VectorXd &dz,
                   bool initialize);
+
     void bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s);
     void computeResiduals();
     void updateStatistics();
