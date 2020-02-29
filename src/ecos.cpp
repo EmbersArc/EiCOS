@@ -573,47 +573,52 @@ void ECOSEigen::initKKT()
     // TODO: Faster element access.
 
     /* LP cone */
-    for (size_t i = 0; i < num_pc; i++)
+    size_t diag_idx = num_var + num_eq;
+    for (size_t k = 0; k < num_pc; k++)
     {
-        K.coeffRef(i, i) = -1.;
+        K.coeffRef(diag_idx, diag_idx) = -1.;
+        diag_idx++;
     }
 
     /* Second-order cone */
-    size_t diag_idx = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
         for (size_t k = 0; k < sc.dim; k++)
         {
-            diag_idx++;
             K.coeffRef(diag_idx, diag_idx) = -1.;
+            diag_idx++;
         }
 
-        diag_idx++;
-        /* diagonal */
+        /* -1 on diagonal */
         K.coeffRef(diag_idx, diag_idx) = -1.;
-        /* v */
+
+        /* -v */
         for (size_t k = 1; k < sc.dim; k++)
         {
             K.coeffRef(diag_idx - sc.dim + k, diag_idx) = 0.;
         }
-
         diag_idx++;
-        /* diagonal */
+
+        /* 1 on diagonal */
         K.coeffRef(diag_idx, diag_idx) = 1.;
-        /* u */
+
+        /* -u */
         K.coeffRef(diag_idx - sc.dim - 1, diag_idx) = 0.;
         for (size_t k = 1; k < sc.dim; k++)
         {
             K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx) = 0.;
         }
+        diag_idx++;
     }
+    assert(diag_idx == dim_K);
+    assert(K.isCompressed());
 }
 
 void ECOSEigen::solve()
 {
     // Equilibrate c
-    // c = c.cwiseQuotient(x_equil);
+    c = c.cwiseQuotient(x_equil);
 
     initKKT();
 
@@ -1055,9 +1060,7 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 {
     Eigen::VectorXd x = ldlt.solve(rhs);
 
-    fmt::print("{}\n", x);
-
-    double x_test = x.lpNorm<2>();
+    fmt::print("x_norm: {}\n", x.lpNorm<2>());
 
     Eigen::SparseMatrix<double> Gt = G.transpose();
     Eigen::SparseMatrix<double> At = A.transpose();
@@ -1513,8 +1516,12 @@ void ECOSEigen::setupKKT()
     }
 
     assert(size_t(K_triplets.size()) == K_nonzeros);
+
     K.setFromTriplets(K_triplets.begin(), K_triplets.end());
+
     assert(size_t(K.nonZeros()) == K_nonzeros);
+    assert(K.isCompressed());
+
     fmt::print("Dimension of KKT matrix: {}\n", dim_K);
     fmt::print("Non-zeros in KKT matrix: {}\n", K.nonZeros());
 }
