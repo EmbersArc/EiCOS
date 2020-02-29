@@ -22,3 +22,6 @@ target_compile_options(ecos_eigen PUBLIC "$<$<CONFIG:DEBUG>:${DEBUG_OPTIONS}>")
 target_compile_options(ecos_eigen PUBLIC "$<$<CONFIG:RELEASE>:${RELEASE_OPTIONS}>")
 
 target_link_libraries(ecos_eigen Eigen3::Eigen)
+
+add_executable(run src/run.cpp)
+target_link_libraries(run ecos_eigen)
