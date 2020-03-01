@@ -399,11 +399,13 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
     {
         if (reduced_accuracy)
         {
-            print("Close to OPTIMAL (within feastol={3.1e}, reltol={3.1e}, abstol={3.1e}).", std::max(info.dres, info.pres), info.relgap, info.gap);
+            print("Close to OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
+                  std::max(info.dres, info.pres), info.relgap, info.gap);
         }
         else
         {
-            print("OPTIMAL (within feastol={3.1e}, reltol={3.1e}, abstol={3.1e}).", std::max(info.dres, info.pres), info.relgap, info.gap);
+            print("OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
+                  std::max(info.dres, info.pres), info.relgap, info.gap);
         }
 
         info.pinf = false;
@@ -418,11 +420,11 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
     {
         if (reduced_accuracy)
         {
-            print("UNBOUNDED (within feastol={3.1e}).", info.dinfres.value());
+            print("UNBOUNDED (within feastol={:3.1e}).", info.dinfres.value());
         }
         else
         {
-            print("Close to UNBOUNDED (within feastol={3.1e}).", info.dinfres.value());
+            print("Close to UNBOUNDED (within feastol={:3.1e}).", info.dinfres.value());
         }
 
         info.pinf = false;
@@ -853,7 +855,6 @@ void ECOSEigen::solve()
         /* Line search on W \ dsaff and W * dzaff */
         print("Performing line search on affine direction.\n");
         info.step_aff = lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtauaff, kap, dkapaff);
-        print("step affine: {}\n", info.step_aff);
 
         /* Centering parameter */
         const double sigma = std::clamp(std::pow(1. - info.step_aff, 3), settings.sigmamin, settings.sigmamax);
@@ -893,7 +894,6 @@ void ECOSEigen::solve()
         /* Line search on combined direction */
         print("Performing line search on combined direction.\n");
         info.step = settings.gamma * lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtau, kap, dkap);
-        print("step: {}\n", info.step);
 
         /* Bring ds to the final unscaled form */
         /* ds = W * ds_by_W */
@@ -1071,11 +1071,11 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
     }
 
     /* Second-order cone */
-    size_t cone_start = num_eq;
+    size_t cone_start = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
         /* Normalize */
-        const double lknorm2 = lambda(cone_start) * lambda(cone_start) -
+        const double lknorm2 = std::pow(lambda(cone_start), 2) -
                                lambda.segment(cone_start + 1, sc.dim - 1).squaredNorm();
         if (lknorm2 <= 0.)
             continue;
@@ -1105,7 +1105,7 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
         const double sigmanorm = sigma.tail(sc.dim - 1).norm() - sigma(0);
 
         /* Update alpha */
-        const double conic_step = std::max({sigmanorm, rhonorm, conic_step});
+        const double conic_step = std::max({0., sigmanorm, rhonorm, conic_step});
 
         if (conic_step != 0.)
         {
@@ -1128,8 +1128,6 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
                            bool initialize)
 {
     Eigen::VectorXd x = ldlt.solve(rhs);
-
-    print("x_norm: {}\n", x.lpNorm<2>());
 
     Eigen::SparseMatrix<double> Gt = G.transpose();
     Eigen::SparseMatrix<double> At = A.transpose();
