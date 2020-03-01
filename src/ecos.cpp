@@ -397,16 +397,17 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
         (info.pres < feastol and info.dres < feastol) and
         (info.gap < abstol or info.relgap < reltol))
     {
-        if (reduced_accuracy)
-        {
-            print("Close to OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
-                  std::max(info.dres, info.pres), info.relgap, info.gap);
-        }
-        else
-        {
-            print("OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
-                  std::max(info.dres, info.pres), info.relgap, info.gap);
-        }
+        if (settings.verbose)
+            if (reduced_accuracy)
+            {
+                print("Close to OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
+                      std::max(info.dres, info.pres), info.relgap, info.gap);
+            }
+            else
+            {
+                print("OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
+                      std::max(info.dres, info.pres), info.relgap, info.gap);
+            }
 
         info.pinf = false;
         info.dinf = false;
@@ -418,14 +419,15 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
              (info.dinfres.value() < feastol) and
              (tau < kap))
     {
-        if (reduced_accuracy)
-        {
-            print("UNBOUNDED (within feastol={:3.1e}).", info.dinfres.value());
-        }
-        else
-        {
-            print("Close to UNBOUNDED (within feastol={:3.1e}).", info.dinfres.value());
-        }
+        if (settings.verbose)
+            if (reduced_accuracy)
+            {
+                print("UNBOUNDED (within feastol={:3.1e}).\n", info.dinfres.value());
+            }
+            else
+            {
+                print("Close to UNBOUNDED (within feastol={:3.1e}).\n", info.dinfres.value());
+            }
 
         info.pinf = false;
         info.dinf = true;
@@ -438,11 +440,11 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
     {
         if (reduced_accuracy)
         {
-            print("PRIMAL INFEASIBLE (within feastol={3.1e}).", info.pinfres.value());
+            print("PRIMAL INFEASIBLE (within feastol={3.1e}).\n", info.pinfres.value());
         }
         else
         {
-            print("Close to PRIMAL INFEASIBLE (within feastol={3.1e}).", info.pinfres.value());
+            print("Close to PRIMAL INFEASIBLE (within feastol={3.1e}).\n", info.pinfres.value());
         }
 
         info.pinf = true;
@@ -548,22 +550,26 @@ void ECOSEigen::updateStatistics()
                                 hresz / std::max(nx + ns, 1.));
     }
 
-    print("TAU={:6.4e}  KAP={:6.4e}  PINFRES={:6.4e}  DINFRES={:6.4e}\n",
-          tau, kap, info.pinfres.value_or(-1), info.dinfres.value_or(-1));
+    if constexpr (debug_printing)
+        print("TAU={:6.4e}  KAP={:6.4e}  PINFRES={:6.4e}  DINFRES={:6.4e}\n",
+              tau, kap, info.pinfres.value_or(-1), info.dinfres.value_or(-1));
 
-    if (info.iter == 0)
+    if (settings.verbose)
     {
-        print("It     pcost       dcost      gap   pres   dres    k/t    mu     step   sigma     IR\n");
-        print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}    ---    ---   {:2d}/{:2d}  -\n",
-              info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.nitref1, info.nitref2);
-    }
-    else
-    {
-        print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:6.4f}  {:2.0e}  {:2d}/{:2d}/{:2d}\n",
-              info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.step, info.sigma,
-              info.nitref1,
-              info.nitref2,
-              info.nitref3);
+        if (info.iter == 0)
+        {
+            print("It     pcost       dcost      gap   pres   dres    k/t    mu     step   sigma     IR\n");
+            print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}    ---    ---   {:2d}/{:2d}  -\n",
+                  info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.nitref1, info.nitref2);
+        }
+        else
+        {
+            print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:6.4f}  {:2.0e}  {:2d}/{:2d}/{:2d}\n",
+                  info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.step, info.sigma,
+                  info.nitref1,
+                  info.nitref2,
+                  info.nitref3);
+        }
     }
 }
 
@@ -691,7 +697,8 @@ void ECOSEigen::solve()
         h_index += sc.dim;
         rhs1_index += sc.dim + 2;
     }
-    print("Set up RHS1 with {} elements.\n", rhs1.size());
+    if constexpr (debug_printing)
+        print("Set up RHS1 with {} elements.\n", rhs1.size());
 
     /**
     * Set up second right hand side
@@ -703,7 +710,8 @@ void ECOSEigen::solve()
     **/
     rhs2.setZero();
     rhs2.head(num_var) = -c;
-    print("Set up RHS2 with {} elements.\n", rhs2.size());
+    if constexpr (debug_printing)
+        print("Set up RHS2 with {} elements.\n", rhs2.size());
 
     // Set up scalings of problem data
     const double scale_rx = c.norm();
@@ -749,7 +757,8 @@ void ECOSEigen::solve()
     Eigen::VectorXd dx1(num_var);
     Eigen::VectorXd dy1(num_eq);
     Eigen::VectorXd dz1(num_ineq);
-    print("Solving for RHS1.\n");
+    if constexpr (debug_printing)
+        print("Solving for RHS1.\n");
     info.nitref1 = solveKKT(rhs1, dx1, dy1, dz1, true);
 
     /* Copy out initial value of x */
@@ -782,7 +791,8 @@ void ECOSEigen::solve()
     Eigen::VectorXd dx2(num_var);
     Eigen::VectorXd dy2(num_eq);
     Eigen::VectorXd dz2(num_ineq);
-    print("Solving for RHS2.\n");
+    if constexpr (debug_printing)
+        print("Solving for RHS2.\n");
     info.nitref2 = solveKKT(rhs2, dx2, dy2, dz2, true);
 
     /* Copy out initial value of y */
@@ -830,7 +840,8 @@ void ECOSEigen::solve()
         /* Affine Search Direction (predictor, need dsaff and dzaff only) */
         RHS_affine();
 
-        print("Solving for affine search direction.\n");
+        if constexpr (debug_printing)
+            print("Solving for affine search direction.\n");
         solveKKT(rhs2, dx2, dy2, dz2, false);
 
         /* dtau_denom = kap / tau - (c' * x1 + b * y1 + h' * z1); */
@@ -853,7 +864,8 @@ void ECOSEigen::solve()
         const double dkapaff = -kap - kap / tau * dtauaff;
 
         /* Line search on W \ dsaff and W * dzaff */
-        print("Performing line search on affine direction.\n");
+        if constexpr (debug_printing)
+            print("Performing line search on affine direction.\n");
         info.step_aff = lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtauaff, kap, dkapaff);
 
         /* Centering parameter */
@@ -862,7 +874,8 @@ void ECOSEigen::solve()
 
         /* Combined search direction */
         RHS_combined();
-        print("Solving for combined search direction.\n");
+        if constexpr (debug_printing)
+            print("Solving for combined search direction.\n");
         info.nitref3 = solveKKT(rhs2, dx2, dy2, dz2, 0);
 
         // print("ds1:\n{}\n", ds1);
@@ -892,7 +905,8 @@ void ECOSEigen::solve()
         const double dkap = -(bkap + kap * dtau) / tau;
 
         /* Line search on combined direction */
-        print("Performing line search on combined direction.\n");
+        if constexpr (debug_printing)
+            print("Performing line search on combined direction.\n");
         info.step = settings.gamma * lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtau, kap, dkap);
 
         /* Bring ds to the final unscaled form */
@@ -1143,8 +1157,11 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     const Eigen::VectorXd &by = rhs.segment(num_var, num_eq);
     const Eigen::VectorXd &bz = rhs.tail(mtilde);
 
-    print("\nIR: it  ||ex||   ||ey||   ||ez|| (threshold: {:2.3e})\n", error_threshold);
-    print("    --------------------------------------------------\n");
+    if constexpr (debug_printing)
+    {
+        print("IR: it  ||ex||   ||ey||   ||ez|| (threshold: {:2.3e})\n", error_threshold);
+        print("    --------------------------------------------------\n");
+    }
 
     /* Iterative refinement */
     size_t k_ref;
@@ -1233,7 +1250,8 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         }
         const double nez = ez.lpNorm<Eigen::Infinity>();
 
-        print("     {}   {:.1g}    {:.1g}    {:.1g} \n", k_ref, nex, ney, nez);
+        if constexpr (debug_printing)
+            print("     {}   {:.1g}    {:.1g}    {:.1g} \n", k_ref, nex, ney, nez);
 
         /* maximum error (infinity norm of e) */
         double nerr = std::max(nex, nez);
@@ -1607,6 +1625,9 @@ void ECOSEigen::setupKKT()
     assert(size_t(K.nonZeros()) == K_nonzeros);
     assert(K.isCompressed());
 
-    print("Dimension of KKT matrix: {}\n", dim_K);
-    print("Non-zeros in KKT matrix: {}\n", K.nonZeros());
+    if constexpr (debug_printing)
+    {
+        print("Dimension of KKT matrix: {}\n", dim_K);
+        print("Non-zeros in KKT matrix: {}\n", K.nonZeros());
+    }
 }

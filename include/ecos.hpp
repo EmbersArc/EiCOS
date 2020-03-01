@@ -2,6 +2,8 @@
 
 #include <Eigen/Sparse>
 
+const bool debug_printing = false;
+
 struct Settings
 {
     const double gamma = 0.99;         // scaling the final step length
@@ -16,7 +18,7 @@ struct Settings
     const double reltol_inacc = 5e-5;  // relative relaxed tolerance on duality gap
     const size_t nitref = 9;           // number of iterative refinement steps
     const size_t maxit = 100;          // maximum number of iterations
-    const bool verbose = true;         // verbosity bool for PRINTLEVEL < 3
+    const bool verbose = true;         // print solver output
     const double linsysacc = 1e-14;    // rel. accuracy of search direction
     const double irerrfact = 6;        // factor by which IR should reduce err
     const double stepmin = 1e-6;       // smallest step that we do take
