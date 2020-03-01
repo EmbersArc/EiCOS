@@ -259,7 +259,7 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
                                Eigen::VectorXd &lambda)
 {
     /* LP cone */
-    lp_cone.v = s.head(num_pc).cwiseQuotient(z.head(num_pc)).cwiseSqrt();
+    lp_cone.v = s.head(num_pc).cwiseQuotient(z.head(num_pc));
     lp_cone.w = lp_cone.v.cwiseSqrt();
 
     /* Second-order cone */
@@ -289,9 +289,9 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         gamma = std::sqrt(0.5 * gamma);
 
         const double a = (0.5 / gamma) * (sc.skbar(0) + sc.zkbar(0));
-        Eigen::VectorXd q = (0.5 / gamma) * (sc.skbar.tail(sc.dim - 1) -
-                                             sc.zkbar.tail(sc.dim - 1));
-        const double w = q.squaredNorm();
+        sc.q = (0.5 / gamma) * (sc.skbar.tail(sc.dim - 1) -
+                                sc.zkbar.tail(sc.dim - 1));
+        const double w = sc.q.squaredNorm();
         sc.a = a;
         sc.w = w;
 
@@ -395,6 +395,15 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
         (info.pres < feastol and info.dres < feastol) and
         (info.gap < abstol or info.relgap < reltol))
     {
+        if (reduced_accuracy)
+        {
+            fmt::print("Close to OPTIMAL (within feastol={3.1e}, reltol={3.1e}, abstol={3.1e}).", std::max(info.dres, info.pres), info.relgap, info.gap);
+        }
+        else
+        {
+            fmt::print("OPTIMAL (within feastol={3.1e}, reltol={3.1e}, abstol={3.1e}).", std::max(info.dres, info.pres), info.relgap, info.gap);
+        }
+
         info.pinf = false;
         info.dinf = false;
         return true;
@@ -405,6 +414,15 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
              (info.dinfres.value() < feastol) and
              (tau < kap))
     {
+        if (reduced_accuracy)
+        {
+            fmt::print("UNBOUNDED (within feastol={3.1e}).", info.dinfres.value());
+        }
+        else
+        {
+            fmt::print("Close to UNBOUNDED (within feastol={3.1e}).", info.dinfres.value());
+        }
+
         info.pinf = false;
         info.dinf = true;
         return false;
@@ -414,6 +432,15 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
     else if (((info.pinfres.has_value() and info.pinfres < feastol) and (tau < kap)) or
              (tau < feastol and kap < feastol and info.pinfres < feastol))
     {
+        if (reduced_accuracy)
+        {
+            fmt::print("PRIMAL INFEASIBLE (within feastol={3.1e}).", info.pinfres.value());
+        }
+        else
+        {
+            fmt::print("Close to PRIMAL INFEASIBLE (within feastol={3.1e}).", info.pinfres.value());
+        }
+
         info.pinf = true;
         info.dinf = false;
         return false;
@@ -514,6 +541,13 @@ void ECOSEigen::updateStatistics()
     {
         info.dinfres = std::max(hresy / std::max(nx, 1.),
                                 hresz / std::max(nx + ns, 1.));
+    }
+
+    if (info.iter == 0)
+    {
+        fmt::print("It     pcost       dcost      gap   pres   dres    k/t    mu     step   sigma     IR\n");
+        fmt::print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}    ---    ---   {:2d} {:2d}  -\n",
+                   info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.nitref1, info.nitref2);
     }
 }
 
@@ -699,7 +733,7 @@ void ECOSEigen::solve()
     Eigen::VectorXd dx1(num_var);
     Eigen::VectorXd dy1(num_eq);
     Eigen::VectorXd dz1(num_ineq);
-    solveKKT(rhs1, dx1, dy1, dz1, true);
+    info.nitref1 = solveKKT(rhs1, dx1, dy1, dz1, true);
 
     /* Copy out initial value of x */
     x = dx1;
@@ -731,7 +765,7 @@ void ECOSEigen::solve()
     Eigen::VectorXd dx2(num_var);
     Eigen::VectorXd dy2(num_eq);
     Eigen::VectorXd dz2(num_ineq);
-    solveKKT(rhs2, dx2, dy2, dz2, true);
+    info.nitref2 = solveKKT(rhs2, dx2, dy2, dz2, true);
 
     /* Copy out initial value of y and bring to cone */
     y = dy2;
@@ -755,7 +789,7 @@ void ECOSEigen::solve()
     info.dinf = false;
 
     bool done = false;
-    for (iteration = 0; iteration < info.iter_max; iteration++)
+    for (info.iter = 0; info.iter < info.iter_max; info.iter++)
     {
         computeResiduals();
         updateStatistics();
@@ -806,7 +840,7 @@ void ECOSEigen::solve()
 
         /* Combined search direction */
         RHS_combined();
-        solveKKT(rhs2, dx2, dy2, dz2, 0);
+        info.nitref3 = solveKKT(rhs2, dx2, dy2, dz2, 0);
 
         /* bkap = kap * tau + dkapaff * dtauaff - sigma * info.mu; */
         const double bkap = kap * tau + dkapaff * dtauaff - sigma * info.mu;
@@ -814,7 +848,7 @@ void ECOSEigen::solve()
         /* dtau = ((1 - sigma) * rt - bkap / tau + c' * x2 + by2 + h' * z2) / dtau_denom; */
         const double dtau = ((1. - sigma) * rt - bkap / tau + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
 
-        /** 
+        /** info.nitref3 = 
          * dx = x2 + dtau*x1
          * dy = y2 + dtau*y1
          * dz = z2 + dtau*z1
@@ -1052,7 +1086,7 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
     return alpha;
 }
 
-void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
+size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
                          Eigen::VectorXd &dx,        // num_var
                          Eigen::VectorXd &dy,        // num_eq
                          Eigen::VectorXd &dz,        // num_ineq
@@ -1068,7 +1102,7 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     const double error_threshold = (1. + rhs.lpNorm<Eigen::Infinity>()) * settings.linsysacc;
 
     double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
-    Eigen::VectorXd dx_ref(num_var);                       // Refinement vector
+    Eigen::VectorXd dx_ref(dim_K);                         // Refinement vector
 
     const size_t mtilde = num_ineq + 2 * so_cones.size(); // Size of expanded G block
 
@@ -1080,7 +1114,8 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     fmt::print("    --------------------------------------------------\n");
 
     /* Iterative refinement */
-    for (size_t k_ref = 0; k_ref <= settings.nitref; k_ref++)
+    size_t k_ref;
+    for (k_ref = 0; k_ref <= settings.nitref; k_ref++)
     {
         /* Copy solution into arrays */
         dx = x.head(num_var);
@@ -1124,9 +1159,14 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         Eigen::VectorXd ez(mtilde);
         const Eigen::VectorXd Gdx = G * dx;
 
+        /* LP cone */
         ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc) +
                           settings.deltastat * dz.head(num_pc);
 
+        /* Second-order cone */
+        // ez  ... mtilde
+        // Gdx ... num_ineq
+        // dz  ... num_ineq
         size_t ez_index = num_pc;
         size_t Gdx_index = num_pc;
         dz_index = num_pc;
@@ -1149,14 +1189,14 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         }
         assert(ez_index == mtilde and dz_index == num_ineq and Gdx_index == num_ineq);
 
-        const Eigen::VectorXd dz_true = x.segment(num_var + num_eq, mtilde);
+        const Eigen::VectorXd dz_true = x.tail(mtilde);
         if (initialize)
         {
-            scale2add2(dz_true, ez);
+            ez += dz_true;
         }
         else
         {
-            ez += dz_true;
+            scale2add2(dz_true, ez);
         }
         const double nez = ez.lpNorm<Eigen::Infinity>();
 
@@ -1164,7 +1204,6 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* maximum error (infinity norm of e) */
         double nerr = std::max(nex, nez);
-
         if (num_eq > 0)
         {
             nerr = std::max(nerr, ney);
@@ -1180,7 +1219,7 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         }
 
         /* Check whether to stop refining */
-        if (k_ref == settings.nitref or
+        if (k_ref == settings.nitref - 1 or
             (nerr < error_threshold) or
             (k_ref > 0 and nerr_prev < settings.irerrfact * nerr))
         {
@@ -1209,6 +1248,9 @@ void ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         dz_index += sc.dim;
         x_index += sc.dim + 2;
     }
+    assert(dz_index == num_ineq and x_index == dim_K);
+
+    return k_ref;
 }
 
 /**

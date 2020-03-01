@@ -107,8 +107,6 @@ private:
     Settings settings;
     Information info, best_info;
 
-    size_t iteration;
-
     Eigen::SparseMatrix<double> G;
     Eigen::SparseMatrix<double> A;
     Eigen::VectorXd c;
@@ -161,11 +159,11 @@ private:
     void setupKKT();
     void initKKT();
     void updateKKT();
-    void solveKKT(const Eigen::VectorXd &rhs,
-                  Eigen::VectorXd &dx,
-                  Eigen::VectorXd &dy,
-                  Eigen::VectorXd &dz,
-                  bool initialize);
+    size_t solveKKT(const Eigen::VectorXd &rhs,
+                    Eigen::VectorXd &dx,
+                    Eigen::VectorXd &dy,
+                    Eigen::VectorXd &dz,
+                    bool initialize);
 
     void bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s);
     void computeResiduals();
