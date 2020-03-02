@@ -19,7 +19,7 @@ int main()
 
     double t0 = tic();
 
-    ECOSEigen solver(G, A, c, h, b, soc_dims);
+    ecos_eigen::ECOSEigen solver(G, A, c, h, b, soc_dims);
 
     fmt::print("Time for setup:    {:.3}ms\n", toc(t0));
     t0 = tic();
@@ -28,17 +28,16 @@ int main()
 
     fmt::print("Time for solve:    {:.3}ms\n", toc(t0));
 
-    bool correct = x.isApprox(solver.x, 1e-6);
+    bool correct = (x - solver.solution()).lpNorm<Eigen::Infinity>() < 1e-7;
 
     if (correct)
     {
-        fmt::print("Solution accurate. (error_norm = {:.4e})\n", (x - solver.x).norm());
+        fmt::print("Solution accurate. (error_norm = {:.4e})\n", (x - solver.solution()).lpNorm<Eigen::Infinity>());
     }
     else
     {
-        fmt::print("Solution inaccurate. (error_norm = {:.4e})\n", (x - solver.x).norm());
+        fmt::print("Solution inaccurate. (error_norm = {:.4e})\n", (x - solver.solution()).lpNorm<Eigen::Infinity>());
     }
 
     fmt::print("\n\n");
-    // fmt::print("x=\n{}\n", solver.x);
 }

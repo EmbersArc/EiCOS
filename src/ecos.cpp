@@ -6,14 +6,74 @@
 
 using fmt::print;
 
+namespace ecos_eigen
+{
+
+void Work::allocate(size_t num_var, size_t num_eq, size_t num_ineq)
+{
+    x.resize(num_var);
+    y.resize(num_eq);
+    s.resize(num_ineq);
+    z.resize(num_ineq);
+    lambda.resize(num_ineq);
+}
+
 void printSparseMatrix(const Eigen::SparseMatrix<double> &m)
 {
-    for (int j = 0; j < m.cols(); j++)
+    for (long j = 0; j < m.cols(); j++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
         {
             print("({:3},{:3}) = {}\n", it.row() + 1, it.col() + 1, it.value());
         }
+    }
+}
+
+void ECOSEigen::allocate()
+{
+    // Allocate work struct
+    w.allocate(num_var, num_eq, num_ineq);
+
+    // Set up LP cone
+    lp_cone.v.resize(num_pc);
+    lp_cone.w.resize(num_pc);
+
+    // Set up second-order cone
+    for (SecondOrderCone &sc : so_cones)
+    {
+        sc.q.resize(sc.dim - 1);
+        sc.skbar.resize(sc.dim);
+        sc.zkbar.resize(sc.dim);
+    }
+
+    W_times_dzaff.resize(num_ineq);
+    dsaff_by_W.resize(num_ineq);
+    dsaff.resize(num_ineq);
+
+    rx.resize(num_var);
+    ry.resize(num_eq);
+    rz.resize(num_ineq);
+
+    rhs1.resize(dim_K);
+    rhs2.resize(dim_K);
+
+    K.reserve(dim_K);
+
+    tmp1.resize(dim_K);
+    tmp2.resize(dim_K);
+    tmp3.resize(dim_K);
+    tmp4.resize(dim_K);
+}
+
+void ECOSEigen::initCones(const Eigen::VectorXi &soc_dims)
+{
+    so_cones.resize(soc_dims.size());
+    for (long i = 0; i < soc_dims.size(); i++)
+    {
+        SecondOrderCone &sc = so_cones[i];
+        sc.dim = soc_dims[i];
+        sc.eta = 0.;
+        sc.a = 0.;
     }
 }
 
@@ -45,40 +105,9 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
      */
     dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
 
-    // Set up LP cone
-    lp_cone.v.resize(num_pc);
-    lp_cone.w.resize(num_pc);
-    lp_cone.kkt_idx.resize(num_pc);
+    initCones(soc_dims);
 
-    // Set up second-order cone
-    so_cones.resize(num_sc);
-    for (size_t i = 0; i < num_sc; i++)
-    {
-        SecondOrderCone &sc = so_cones[i];
-        sc.dim = soc_dims(i);
-        sc.eta = 0.;
-        sc.a = 0.;
-        sc.Didx.resize(sc.dim);
-        sc.q.resize(sc.dim - 1);
-        sc.skbar.resize(sc.dim);
-        sc.zkbar.resize(sc.dim);
-    }
-
-    x.resize(num_var);
-    y.resize(num_eq);
-    z.resize(num_ineq);
-    s.resize(num_ineq);
-    lambda.resize(num_ineq);
-    W_times_dzaff.resize(num_ineq);
-    dsaff_by_W.resize(num_ineq);
-    dsaff.resize(num_ineq);
-
-    rx.resize(num_var);
-    ry.resize(num_eq);
-    rz.resize(num_ineq);
-
-    rhs1.resize(dim_K);
-    rhs2.resize(dim_K);
+    allocate();
 
     print("- - - - - - - - - - - - - - -\n");
     print("|      Problem summary      |\n");
@@ -101,9 +130,14 @@ ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
     setupKKT();
 }
 
+const Eigen::VectorXd &ECOSEigen::solution() const
+{
+    return w.x;
+}
+
 void maxRows(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
 {
-    for (int j = 0; j < m.cols(); j++)
+    for (long j = 0; j < m.cols(); j++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
         {
@@ -114,7 +148,7 @@ void maxRows(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
 
 void maxCols(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
 {
-    for (int j = 0; j < m.cols(); j++)
+    for (long j = 0; j < m.cols(); j++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
         {
@@ -125,7 +159,7 @@ void maxCols(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
 
 void equilibrateRows(const Eigen::VectorXd &e, Eigen::SparseMatrix<double> &m)
 {
-    for (int j = 0; j < m.cols(); j++)
+    for (long j = 0; j < m.cols(); j++)
     {
         /* equilibrate the rows of a matrix */
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
@@ -137,7 +171,7 @@ void equilibrateRows(const Eigen::VectorXd &e, Eigen::SparseMatrix<double> &m)
 
 void equilibrateCols(const Eigen::VectorXd &e, Eigen::SparseMatrix<double> &m)
 {
-    for (int j = 0; j < m.cols(); j++)
+    for (long j = 0; j < m.cols(); j++)
     {
         /* equilibrate the columns of a matrix */
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
@@ -153,9 +187,12 @@ void ECOSEigen::setEquilibration()
     A_equil.resize(num_eq);
     G_equil.resize(num_ineq);
 
-    Eigen::VectorXd x_tmp(num_var);
-    Eigen::VectorXd A_tmp(num_eq);
-    Eigen::VectorXd G_tmp(num_ineq);
+    tmp1.conservativeResize(num_var);
+    tmp2.conservativeResize(num_eq);
+    tmp3.conservativeResize(num_ineq);
+    Eigen::VectorXd &x_tmp = tmp1;
+    Eigen::VectorXd &A_tmp = tmp2;
+    Eigen::VectorXd &G_tmp = tmp3;
 
     /* Initialize equilibration vector to 1 */
     x_equil.setOnes();
@@ -229,7 +266,7 @@ void ECOSEigen::setEquilibration()
 void restore(const Eigen::VectorXd &d, const Eigen::VectorXd &e,
              Eigen::SparseMatrix<double> &m)
 {
-    for (int k = 0; k < m.outerSize(); ++k)
+    for (long k = 0; k < m.outerSize(); ++k)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, k); it; ++it)
         {
@@ -367,10 +404,10 @@ void ECOSEigen::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
  * The primal and dual infeasibility flags pinf and dinf are raised
  * according to the outcome of the test.
  *
- * If none of the exit tests are met, the function returns ECOS_NOT_CONVERGED_YET.
+ * If none of the exit tests are met, the function returns NOT_CONVERGED_YET.
  * This should not be an exitflag that is ever returned to the outside world.
  **/
-bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
+exitcode ECOSEigen::checkExitConditions(bool reduced_accuracy)
 {
     double feastol;
     double abstol;
@@ -393,73 +430,97 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
     }
 
     /* Optimal? */
-    if ((-cx > 0 or -by - hz >= -abstol) and
-        (info.pres < feastol and info.dres < feastol) and
-        (info.gap < abstol or info.relgap < reltol))
+    if ((-w.cx > 0 or -w.by - w.hz >= -abstol) and
+        (w.i.pres < feastol and w.i.dres < feastol) and
+        (w.i.gap < abstol or w.i.relgap < reltol))
     {
         if (settings.verbose)
         {
             if (reduced_accuracy)
             {
                 print("Close to OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
-                      std::max(info.dres, info.pres), info.relgap, info.gap);
+                      std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
             }
             else
             {
                 print("OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
-                      std::max(info.dres, info.pres), info.relgap, info.gap);
+                      std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
             }
         }
 
-        info.pinf = false;
-        info.dinf = false;
-        return true;
+        w.i.pinf = false;
+        w.i.dinf = false;
+
+        if (reduced_accuracy)
+        {
+            return exitcode::CLOSE_TO_OPTIMAL;
+        }
+        else
+        {
+            return exitcode::OPTIMAL;
+        }
     }
 
     /* Dual infeasible? */
-    else if ((info.dinfres.has_value()) and
-             (info.dinfres.value() < feastol) and
-             (tau < kap))
+    else if ((w.i.dinfres.has_value()) and
+             (w.i.dinfres.value() < feastol) and
+             (w.tau < w.kap))
     {
         if (settings.verbose)
         {
             if (reduced_accuracy)
             {
-                print("UNBOUNDED (within feastol={:3.1e}).\n", info.dinfres.value());
+                print("UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
             }
             else
             {
-                print("Close to UNBOUNDED (within feastol={:3.1e}).\n", info.dinfres.value());
+                print("Close to UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
             }
         }
 
-        info.pinf = false;
-        info.dinf = true;
-        return false;
-    }
+        w.i.pinf = false;
+        w.i.dinf = true;
 
-    /* Primal infeasible? */
-    else if (((info.pinfres.has_value() and info.pinfres < feastol) and (tau < kap)) or
-             (tau < feastol and kap < feastol and info.pinfres < feastol))
-    {
         if (reduced_accuracy)
         {
-            print("PRIMAL INFEASIBLE (within feastol={3.1e}).\n", info.pinfres.value());
+            return exitcode::CLOSE_TO_DUAL_INFEASIBLE;
         }
         else
         {
-            print("Close to PRIMAL INFEASIBLE (within feastol={3.1e}).\n", info.pinfres.value());
+            return exitcode::DUAL_INFEASIBLE;
+        }
+    }
+
+    /* Primal infeasible? */
+    else if (((w.i.pinfres.has_value() and w.i.pinfres < feastol) and (w.tau < w.kap)) or
+             (w.tau < feastol and w.kap < feastol and w.i.pinfres < feastol))
+    {
+        if (reduced_accuracy)
+        {
+            print("PRIMAL INFEASIBLE (within feastol={3.1e}).\n", w.i.pinfres.value());
+        }
+        else
+        {
+            print("Close to PRIMAL INFEASIBLE (within feastol={3.1e}).\n", w.i.pinfres.value());
         }
 
-        info.pinf = true;
-        info.dinf = false;
-        return false;
+        w.i.pinf = true;
+        w.i.dinf = false;
+
+        if (reduced_accuracy)
+        {
+            return exitcode::CLOSE_TO_PRIMAL_INFEASIBLE;
+        }
+        else
+        {
+            return exitcode::PRIMAL_INFEASIBLE;
+        }
     }
 
     /* Indicate if none of the above criteria are met */
     else
     {
-        return false;
+        return exitcode::NOT_CONVERGED_YET;
     }
 }
 
@@ -470,26 +531,26 @@ void ECOSEigen::computeResiduals()
     * hry =  A * x                 ry = hry - tau * b      hresy = ||ry||_2
     * hrz =  s + G * x             rz = hrz - tau * h      hresz = ||rz||_2
     * 
-    * rt = kappa + c'*x + b'*y + h'*z
+    * rt = kappa + c' * x + b' * y + h' * z
     **/
 
     /* rx = -A' * y - G' * z - tau * c */
     const Eigen::SparseMatrix<double> Gt = G.transpose();
     const Eigen::SparseMatrix<double> At = A.transpose();
-    rx = -Gt * z;
+    rx = -Gt * w.z;
     if (num_eq > 0)
     {
-        rx -= At * y;
+        rx -= At * w.y;
     }
     hresx = rx.norm();
-    rx -= tau * c;
+    rx -= w.tau * c;
 
     /* ry = A * x - tau * b */
     if (num_eq > 0)
     {
-        ry = A * x;
+        ry = A * w.x;
         hresy = ry.norm();
-        ry -= tau * b;
+        ry -= w.tau * b;
     }
     else
     {
@@ -497,38 +558,38 @@ void ECOSEigen::computeResiduals()
     }
 
     /* rz = s + G * x - tau * h */
-    rz = s + G * x;
+    rz = w.s + G * w.x;
     hresz = rz.norm();
-    rz -= tau * h;
+    rz -= w.tau * h;
 
     /* rt = kappa + c' * x + b' * y + h' * z; */
-    cx = c.dot(x);
-    by = num_eq > 0 ? b.dot(y) : 0.;
-    hz = h.dot(z);
-    rt = kap + cx + by + hz;
+    w.cx = c.dot(w.x);
+    w.by = num_eq > 0 ? b.dot(w.y) : 0.;
+    w.hz = h.dot(w.z);
+    rt = w.kap + w.cx + w.by + w.hz;
 
-    nx = x.norm();
-    ny = y.norm();
-    nz = z.norm();
-    ns = s.norm();
+    nx = w.x.norm();
+    ny = w.y.norm();
+    nz = w.z.norm();
+    ns = w.s.norm();
 }
 
 void ECOSEigen::updateStatistics()
 {
-    info.gap = s.dot(z);
-    info.mu = (info.gap + kap * tau) / ((num_pc + num_sc) + 1);
-    info.kapovert = kap / tau;
-    info.pcost = cx / tau;
-    info.dcost = -(hz + by) / tau;
+    w.i.gap = w.s.dot(w.z);
+    w.i.mu = (w.i.gap + w.kap * w.tau) / ((num_pc + num_sc) + 1);
+    w.i.kapovert = w.kap / w.tau;
+    w.i.pcost = w.cx / w.tau;
+    w.i.dcost = -(w.hz + w.by) / w.tau;
 
     /* Relative duality gap */
-    if (info.pcost < 0)
+    if (w.i.pcost < 0)
     {
-        info.relgap = info.gap / (-info.pcost);
+        w.i.relgap = w.i.gap / (-w.i.pcost);
     }
-    else if (info.dcost > 0)
+    else if (w.i.dcost > 0)
     {
-        info.relgap = info.gap / info.dcost;
+        w.i.relgap = w.i.gap / w.i.dcost;
     }
     else
     {
@@ -540,39 +601,39 @@ void ECOSEigen::updateStatistics()
     /* Residuals */
     const double nry = num_eq > 0 ? ry.norm() / std::max(resy0 + nx, 1.) : 0.;
     const double nrz = rz.norm() / std::max(resz0 + nx + ns, 1.);
-    info.pres = std::max(nry, nrz) / tau;
-    info.dres = rx.norm() / std::max(resx0 + ny + nz, 1.) / tau;
+    w.i.pres = std::max(nry, nrz) / w.tau;
+    w.i.dres = rx.norm() / std::max(resx0 + ny + nz, 1.) / w.tau;
 
     /* Infeasibility measures */
-    if ((hz + by) / std::max(ny + nz, 1.) < -settings.reltol)
+    if ((w.hz + w.by) / std::max(ny + nz, 1.) < -settings.reltol)
     {
-        info.pinfres = hresx / std::max(ny + nz, 1.);
+        w.i.pinfres = hresx / std::max(ny + nz, 1.);
     }
-    if (cx / std::max(nx, 1.) < -settings.reltol)
+    if (w.cx / std::max(nx, 1.) < -settings.reltol)
     {
-        info.dinfres = std::max(hresy / std::max(nx, 1.),
-                                hresz / std::max(nx + ns, 1.));
+        w.i.dinfres = std::max(hresy / std::max(nx, 1.),
+                               hresz / std::max(nx + ns, 1.));
     }
 
     if constexpr (debug_printing)
         print("TAU={:6.4e}  KAP={:6.4e}  PINFRES={:6.4e}  DINFRES={:6.4e}\n",
-              tau, kap, info.pinfres.value_or(-1), info.dinfres.value_or(-1));
+              w.tau, w.kap, w.i.pinfres.value_or(-1), w.i.dinfres.value_or(-1));
 
     if (settings.verbose)
     {
-        if (info.iter == 0)
+        if (w.i.iter == 0)
         {
             print("It     pcost       dcost      gap   pres   dres    k/t    mu     step   sigma     IR\n");
             print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}    ---    ---   {:2d}/{:2d}  -\n",
-                  info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.nitref1, info.nitref2);
+                  w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu, w.i.nitref1, w.i.nitref2);
         }
         else
         {
             print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:6.4f}  {:2.0e}  {:2d}/{:2d}/{:2d}\n",
-                  info.iter, info.pcost, info.dcost, info.gap, info.pres, info.dres, info.kapovert, info.mu, info.step, info.sigma,
-                  info.nitref1,
-                  info.nitref2,
-                  info.nitref3);
+                  w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu, w.i.step, w.i.sigma,
+                  w.i.nitref1,
+                  w.i.nitref2,
+                  w.i.nitref3);
         }
     }
 }
@@ -675,8 +736,11 @@ void ECOSEigen::initKKT()
     assert(K.isCompressed());
 }
 
-void ECOSEigen::solve()
+exitcode ECOSEigen::solve()
 {
+
+    exitcode code = exitcode::FATAL;
+
     // Equilibrate c
     c = c.cwiseQuotient(x_equil);
 
@@ -732,8 +796,9 @@ void ECOSEigen::solve()
     ldlt.factorize(K);
     if (ldlt.info() != Eigen::Success)
     {
-        print("Failed to factorize matrix!\n");
-        std::exit(-1);
+        if constexpr (debug_printing)
+            print("Failed to factorize matrix while initializing!\n");
+        return exitcode::FATAL;
     }
 
     /**
@@ -763,13 +828,13 @@ void ECOSEigen::solve()
     Eigen::VectorXd dz1(num_ineq);
     if constexpr (debug_printing)
         print("Solving for RHS1.\n");
-    info.nitref1 = solveKKT(rhs1, dx1, dy1, dz1, true);
+    w.i.nitref1 = solveKKT(rhs1, dx1, dy1, dz1, true);
 
     /* Copy out initial value of x */
-    x = dx1;
+    w.x = dx1;
 
     /* Copy out -r and bring to cone */
-    bringToCone(-dz1, s);
+    bringToCone(-dz1, w.s);
 
     /**
 	 * Dual Variables:
@@ -797,13 +862,13 @@ void ECOSEigen::solve()
     Eigen::VectorXd dz2(num_ineq);
     if constexpr (debug_printing)
         print("Solving for RHS2.\n");
-    info.nitref2 = solveKKT(rhs2, dx2, dy2, dz2, true);
+    w.i.nitref2 = solveKKT(rhs2, dx2, dy2, dz2, true);
 
     /* Copy out initial value of y */
-    y = dy2;
+    w.y = dy2;
 
     /* Bring variable to cone */
-    bringToCone(dz2, z);
+    bringToCone(dz2, w.z);
 
     /**
     * Modify first right hand side
@@ -814,31 +879,123 @@ void ECOSEigen::solve()
     rhs1.head(num_var) = -c;
 
     /* other variables */
-    kap = 1.,
-    tau = 1.,
+    w.kap = 1.,
+    w.tau = 1.,
 
-    info.step = 0;
-    info.step_aff = 0;
-    info.pinf = false;
-    info.dinf = false;
-    info.iter_max = settings.iter_max;
+    w.i.step = 0;
+    w.i.step_aff = 0;
+    w.i.pinf = false;
+    w.i.dinf = false;
+    w.i.iter_max = settings.iter_max;
 
-    for (info.iter = 0; info.iter < info.iter_max; info.iter++)
+    double pres_prev;
+
+    // Main interior point loop
+    for (w.i.iter = 0; w.i.iter < w.i.iter_max; w.i.iter++)
     {
         computeResiduals();
 
         updateStatistics();
 
-        bool done = checkExitConditions(false);
-
-        if (done)
+        /**
+         *  SAFEGUARD: Backtrack to best previously seen iterate if
+         *
+         * - the update was bad such that the primal residual PRES has increased by a factor of SAFEGUARD, or
+         * - the gap became negative
+         *
+         * If the safeguard is activated, the solver tests if reduced precision has been reached, and reports
+         * accordingly. If not even reduced precision is reached, ECOS returns the flag ECOS_NUMERICS.
+         */
+        if (w.i.iter > 0 and
+            (w.i.pres > settings.safeguard * pres_prev or w.i.gap < 0))
         {
+            if (settings.verbose)
+            {
+                print("Unreliable search direction detected, recovering best iterate ({}) and stopping.\n",
+                      0); // TODO
+            }
+
+            // TODO: restoreBestIterate();
+
+            /* Determine whether we have reached at least reduced accuracy */
+            code = checkExitConditions(true);
+
+            /* if not, exit anyways */
+            if (code == exitcode::NOT_CONVERGED_YET)
+            {
+                code = exitcode::NUMERICS;
+
+                if (settings.verbose)
+                {
+                    print("\nNUMERICAL PROBLEMS (reached feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
+                          std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
+                }
+                break;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        pres_prev = w.i.pres;
+
+        /* Check termination criteria to full precision and exit if necessary */
+        code = checkExitConditions(false);
+
+        if (code == exitcode::NOT_CONVERGED_YET)
+        {
+            /**
+             * Full precision has not been reached yet. Check for two more cases of exit:
+             *  (i) min step size, in which case we assume we won't make progress any more, and
+             * (ii) maximum number of iterations reached
+             * If these two are not fulfilled, another iteration will be made.
+             **/
+
+            /* Did the line search cock up? (zero step length) */
+            if (w.i.iter > 0 and w.i.step == settings.stepmin * settings.gamma)
+            {
+                if (settings.verbose)
+                {
+                    print("No further progress possible, recovering best iterate ({}) and stopping.", 0); // TODO
+                }
+
+                // TODO: restoreBestIterate();
+
+                /* Determine whether we have reached reduced precision */
+                code = checkExitConditions(true);
+
+                if (code == exitcode::NOT_CONVERGED_YET)
+                {
+                    code = exitcode::NUMERICS;
+                    if (settings.verbose)
+                    {
+                        print("\nNUMERICAL PROBLEMS (reached feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
+                              std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
+                    }
+                }
+                break;
+            }
+            /* MAXIT reached? */
+            else if (w.i.iter == w.i.iter_max)
+            {
+                return exitcode::MAXIT;
+            }
+        }
+        else
+        {
+            /* Full precision has been reached, stop solver */
             break;
         }
 
-        updateScalings(s, z, lambda);
+        updateScalings(w.s, w.z, w.lambda);
 
-        updateKKT();
+        bool update_success = updateKKT();
+
+        if (not update_success)
+        {
+            return exitcode::FATAL;
+        }
 
         /* Solve for RHS1, which is used later also in combined direction */
         solveKKT(rhs1, dx1, dy1, dz1, false);
@@ -851,10 +1008,10 @@ void ECOSEigen::solve()
         solveKKT(rhs2, dx2, dy2, dz2, false);
 
         /* dtau_denom = kap / tau - (c' * x1 + b * y1 + h' * z1); */
-        const double dtau_denom = kap / tau - c.dot(dx1) - b.dot(dy1) - h.dot(dz1);
+        const double dtau_denom = w.kap / w.tau - c.dot(dx1) - b.dot(dy1) - h.dot(dz1);
 
         /* dtauaff = (dt + c' * x2 + b * y2 + h' * z2) / dtau_denom; */
-        const double dtauaff = (rt - kap + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
+        const double dtauaff = (rt - w.kap + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
 
         /* dzaff = dz2 + dtau_aff * dz1 */
         /* Let dz2   = dzaff, use this in the linesearch for unsymmetric cones */
@@ -864,36 +1021,33 @@ void ECOSEigen::solve()
         scale(dz2, W_times_dzaff);
 
         /* W \ dsaff = -W * dzaff - lambda; */
-        dsaff_by_W = -W_times_dzaff - lambda;
+        dsaff_by_W = -W_times_dzaff - w.lambda;
 
         /* dkapaff = -(bkap + kap * dtauaff) / tau; bkap = kap * tau*/
-        const double dkapaff = -kap - kap / tau * dtauaff;
+        const double dkapaff = -w.kap - w.kap / w.tau * dtauaff;
 
         /* Line search on W \ dsaff and W * dzaff */
         if constexpr (debug_printing)
             print("Performing line search on affine direction.\n");
-        info.step_aff = lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtauaff, kap, dkapaff);
+        w.i.step_aff = lineSearch(w.lambda, dsaff_by_W, W_times_dzaff, w.tau, dtauaff, w.kap, dkapaff);
 
         /* Centering parameter */
-        const double sigma = std::clamp(std::pow(1. - info.step_aff, 3), settings.sigmamin, settings.sigmamax);
-        info.sigma = sigma;
+        const double sigma = std::clamp(std::pow(1. - w.i.step_aff, 3), settings.sigmamin, settings.sigmamax);
+        w.i.sigma = sigma;
 
         /* Combined search direction */
         RHS_combined();
         if constexpr (debug_printing)
             print("Solving for combined search direction.\n");
-        info.nitref3 = solveKKT(rhs2, dx2, dy2, dz2, 0);
+        w.i.nitref3 = solveKKT(rhs2, dx2, dy2, dz2, 0);
 
-        // print("ds1:\n{}\n", ds1);
-        // print("ds2:\n{}\n", ds2);
-
-        /* bkap = kap * tau + dkapaff * dtauaff - sigma * info.mu; */
-        const double bkap = kap * tau + dkapaff * dtauaff - sigma * info.mu;
+        /* bkap = kap * tau + dkapaff * dtauaff - sigma * w.i.mu; */
+        const double bkap = w.kap * w.tau + dkapaff * dtauaff - sigma * w.i.mu;
 
         /* dtau = ((1 - sigma) * rt - bkap / tau + c' * x2 + by2 + h' * z2) / dtau_denom; */
-        const double dtau = ((1. - sigma) * rt - bkap / tau + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
+        const double dtau = ((1. - sigma) * rt - bkap / w.tau + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
 
-        /** info.nitref3 = 
+        /**
          * dx = x2 + dtau*x1
          * dy = y2 + dtau*y1
          * dz = z2 + dtau*z1
@@ -908,29 +1062,31 @@ void ECOSEigen::solve()
         dsaff_by_W = -(dsaff_by_W + W_times_dzaff);
 
         /* dkap = -(bkap + kap * dtau) / tau; */
-        const double dkap = -(bkap + kap * dtau) / tau;
+        const double dkap = -(bkap + w.kap * dtau) / w.tau;
 
         /* Line search on combined direction */
         if constexpr (debug_printing)
             print("Performing line search on combined direction.\n");
-        info.step = settings.gamma * lineSearch(lambda, dsaff_by_W, W_times_dzaff, tau, dtau, kap, dkap);
+        w.i.step = settings.gamma * lineSearch(w.lambda, dsaff_by_W, W_times_dzaff, w.tau, dtau, w.kap, dkap);
 
         /* Bring ds to the final unscaled form */
         /* ds = W * ds_by_W */
         scale(dsaff_by_W, dsaff);
 
         /* Update variables */
-        x += info.step * dx2;
-        y += info.step * dy2;
-        z += info.step * dz2;
-        s += info.step * dsaff;
+        w.x += w.i.step * dx2;
+        w.y += w.i.step * dy2;
+        w.z += w.i.step * dz2;
+        w.s += w.i.step * dsaff;
 
-        kap += info.step * dkap;
-        tau += info.step * dtau;
+        w.kap += w.i.step * dkap;
+        w.tau += w.i.step * dtau;
     }
 
     /* scale variables back */
     backscale();
+
+    return code;
 }
 
 /**
@@ -942,10 +1098,10 @@ void ECOSEigen::solve()
  */
 void ECOSEigen::backscale()
 {
-    x = x.cwiseQuotient(x_equil * tau);
-    y = y.cwiseQuotient(A_equil * tau);
-    z = z.cwiseQuotient(G_equil * tau);
-    s = s.cwiseProduct(G_equil / tau);
+    w.x = w.x.cwiseQuotient(x_equil * w.tau);
+    w.y = w.y.cwiseQuotient(A_equil * w.tau);
+    w.z = w.z.cwiseQuotient(G_equil * w.tau);
+    w.s = w.s.cwiseProduct(G_equil / w.tau);
     c = c.cwiseProduct(x_equil);
 }
 
@@ -958,10 +1114,10 @@ void ECOSEigen::RHS_combined()
     Eigen::VectorXd ds2(num_ineq);
 
     /* ds = lambda o lambda + W \ s o Wz - sigma * mu * e) */
-    conicProduct(lambda, lambda, ds1);
+    conicProduct(w.lambda, w.lambda, ds1);
     conicProduct(dsaff_by_W, W_times_dzaff, ds2);
 
-    const double sigmamu = info.sigma * info.mu;
+    const double sigmamu = w.i.sigma * w.i.mu;
     ds1.head(num_pc) += ds2.head(num_pc);
     ds1.head(num_pc).array() -= sigmamu;
 
@@ -974,11 +1130,11 @@ void ECOSEigen::RHS_combined()
     }
 
     /* dz = -(1 - sigma) * rz + W * (lambda \ ds) */
-    conicDivision(lambda, ds1, dsaff_by_W);
+    conicDivision(w.lambda, ds1, dsaff_by_W);
     scale(dsaff_by_W, ds1);
 
     /* copy in RHS */
-    const double one_minus_sigma = 1. - info.sigma;
+    const double one_minus_sigma = 1. - w.i.sigma;
 
     // print("one_minus_sigma: \n{}\n", one_minus_sigma);
     // print("ds1: \n{}\n", ds1);
@@ -1101,13 +1257,15 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
             continue;
 
         const double lknorm = std::sqrt(lknorm2);
-        Eigen::VectorXd lkbar = lambda.segment(cone_start, sc.dim) / lknorm;
+        const Eigen::VectorXd lkbar = lambda.segment(cone_start, sc.dim) / lknorm;
 
         const double lknorminv = 1. / lknorm;
 
         /* Calculate products */
-        const double lkbar_times_dsk = lkbar(0) * ds(cone_start) - lkbar.segment(1, sc.dim - 1).dot(ds.segment(cone_start + 1, sc.dim - 1));
-        const double lkbar_times_dzk = lkbar(0) * dz(cone_start) - lkbar.segment(1, sc.dim - 1).dot(dz.segment(cone_start + 1, sc.dim - 1));
+        const double lkbar_times_dsk = lkbar(0) * ds(cone_start) -
+                                       lkbar.segment(1, sc.dim - 1).dot(ds.segment(cone_start + 1, sc.dim - 1));
+        const double lkbar_times_dzk = lkbar(0) * dz(cone_start) -
+                                       lkbar.segment(1, sc.dim - 1).dot(dz.segment(cone_start + 1, sc.dim - 1));
 
         /* Now construct rhok and sigmak, the first element is different */
         double factor;
@@ -1169,6 +1327,17 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         print("    --------------------------------------------------\n");
     }
 
+    tmp1.conservativeResize(num_var);
+    tmp2.conservativeResize(num_eq);
+    tmp3.conservativeResize(mtilde);
+    tmp4.conservativeResize(dim_K);
+    tmp5.conservativeResize(num_var);
+    Eigen::VectorXd &ex = tmp1;
+    Eigen::VectorXd &ey = tmp2;
+    Eigen::VectorXd &ez = tmp3;
+    Eigen::VectorXd &e = tmp4;
+    Eigen::VectorXd &Gdx = tmp5;
+
     /* Iterative refinement */
     size_t k_ref;
     for (k_ref = 0; k_ref <= settings.nitref; k_ref++)
@@ -1191,7 +1360,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* Error on dx */
         /* ex = bx - A' * dy - G' * dz */
-        Eigen::VectorXd ex = bx - Gt * dz;
+        ex = bx - Gt * dz;
         if (num_eq > 0)
         {
             ex -= At * dy;
@@ -1201,7 +1370,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* Error on dy */
         /* ey = by - A * dx */
-        Eigen::VectorXd ey = by;
+        ey = by;
         if (num_eq > 0)
         {
             ey -= A * dx;
@@ -1211,40 +1380,29 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* Error on ez */
         /* ez = bz - G * dx + V * dz_true */
-        Eigen::VectorXd ez(mtilde);
-        const Eigen::VectorXd Gdx = G * dx;
+        Gdx = G * dx;
 
         /* LP cone */
         ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc) +
                           settings.deltastat * dz.head(num_pc);
 
         /* Second-order cone */
-        // ez  ... mtilde
-        // Gdx ... num_ineq
-        // dz  ... num_ineq
         size_t ez_index = num_pc;
-        size_t Gdx_index = num_pc;
         dz_index = num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
             ez.segment(ez_index, sc.dim) = bz.segment(ez_index, sc.dim) -
-                                           Gdx.segment(Gdx_index, sc.dim);
-            Gdx_index += sc.dim;
-
-            // According to ECOS:
-            // Is this correct?
+                                           Gdx.segment(dz_index, sc.dim);
             ez.segment(ez_index, sc.dim - 1) += settings.deltastat * dz.segment(dz_index, sc.dim - 1);
-            dz_index += sc.dim - 1;
-            ez(ez_index + sc.dim - 1) -= settings.deltastat * dz(dz_index);
-            dz_index++;
-
+            dz_index += sc.dim;
             ez_index += sc.dim;
+            ez(ez_index - 1) -= settings.deltastat * dz(dz_index - 1);
             ez(ez_index++) = 0.;
             ez(ez_index++) = 0.;
         }
-        assert(ez_index == mtilde and dz_index == num_ineq and Gdx_index == num_ineq);
+        assert(ez_index == mtilde and dz_index == num_ineq and dz_index == num_ineq);
 
-        const Eigen::VectorXd dz_true = x.tail(mtilde);
+        const Eigen::VectorXd &dz_true = x.tail(mtilde);
         if (initialize)
         {
             ez += dz_true;
@@ -1284,7 +1442,6 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         nerr_prev = nerr;
 
         /* Solve for refinement */
-        Eigen::VectorXd e(dim_K);
         e << ex, ey, ez;
         dx_ref = ldlt.solve(e);
 
@@ -1406,13 +1563,13 @@ void ECOSEigen::RHS_affine()
     rhs2.head(num_var + num_eq) << rx, -ry;
 
     /* Second-order cone */
-    rhs2.segment(num_var + num_eq, num_pc) = s.head(num_pc) - rz.head(num_pc);
+    rhs2.segment(num_var + num_eq, num_pc) = w.s.head(num_pc) - rz.head(num_pc);
     size_t rhs_index = num_var + num_eq + num_pc;
     size_t rz_index = num_pc;
     for (const SecondOrderCone &sc : so_cones)
     {
         rhs2.segment(rhs_index, sc.dim) =
-            s.segment(rz_index, sc.dim) - rz.segment(rz_index, sc.dim);
+            w.s.segment(rz_index, sc.dim) - rz.segment(rz_index, sc.dim);
         rz_index += sc.dim;
 
         rhs_index += sc.dim;
@@ -1421,7 +1578,7 @@ void ECOSEigen::RHS_affine()
     }
 }
 
-void ECOSEigen::updateKKT()
+bool ECOSEigen::updateKKT()
 {
     // TODO: Faster element access.
 
@@ -1472,9 +1629,11 @@ void ECOSEigen::updateKKT()
     ldlt.factorize(K);
     if (ldlt.info() != Eigen::Success)
     {
-        print("Failed to factorize matrix!\n");
-        std::exit(-1);
+        if constexpr (debug_printing)
+            print("Failed to factorize matrix!\n");
+        return false;
     }
+    return true;
 }
 
 void ECOSEigen::setupKKT()
@@ -1523,7 +1682,7 @@ void ECOSEigen::setupKKT()
     }
 
     // A' (1,2)
-    for (int k = 0; k < At.outerSize(); k++)
+    for (long k = 0; k < At.outerSize(); k++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
         {
@@ -1537,7 +1696,7 @@ void ECOSEigen::setupKKT()
         size_t col_K = num_var + num_eq;
         {
             const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
-            for (int k = 0; k < Gt_block.outerSize(); k++)
+            for (long k = 0; k < Gt_block.outerSize(); k++)
             {
                 for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
                 {
@@ -1552,7 +1711,7 @@ void ECOSEigen::setupKKT()
         for (const SecondOrderCone &sc : so_cones)
         {
             const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
-            for (int k = 0; k < Gt_block.outerSize(); k++)
+            for (long k = 0; k < Gt_block.outerSize(); k++)
             {
                 for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
                 {
@@ -1636,3 +1795,5 @@ void ECOSEigen::setupKKT()
         print("Non-zeros in KKT matrix: {}\n", K.nonZeros());
     }
 }
+
+} // namespace ecos_eigen

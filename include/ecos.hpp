@@ -2,6 +2,26 @@
 
 #include <Eigen/Sparse>
 
+namespace ecos_eigen
+{
+
+enum class exitcode
+{
+    OPTIMAL,           /* Problem solved to optimality              */
+    PRIMAL_INFEASIBLE, /* Found certificate of primal infeasibility */
+    DUAL_INFEASIBLE,   /* Found certificate of dual infeasibility   */
+    INACC_OFFSET,      /* Offset exitflag at inaccurate results     */
+    MAXIT,             /* Maximum number of iterations reached      */
+    NUMERICS,          /* Search direction unreliable               */
+    OUTCONE,           /* s or z got outside the cone, numerics?    */
+    SIGINT,            /* solver interrupted by a signal/ctrl-c     */
+    FATAL,             /* Unknown problem in solver                 */
+    CLOSE_TO_OPTIMAL,
+    CLOSE_TO_PRIMAL_INFEASIBLE,
+    CLOSE_TO_DUAL_INFEASIBLE,
+    NOT_CONVERGED_YET
+};
+
 const bool debug_printing = false;
 
 struct Settings
@@ -27,6 +47,7 @@ struct Settings
     const double sigmamax = 1.;        // never fully center
     const size_t equil_iters = 3;      // eqilibration iterations
     const size_t iter_max = 100;       // maximum solver iterations
+    const size_t safeguard = 500;      // Maximum increase in PRES before NUMERICS is thrown.
 };
 
 struct Information
@@ -57,7 +78,6 @@ struct PositiveCone
 {
     Eigen::VectorXd w; // size num_pc
     Eigen::VectorXd v; // size num_pc
-    Eigen::VectorXi kkt_idx;
 };
 
 struct SecondOrderCone
@@ -71,10 +91,28 @@ struct SecondOrderCone
     double eta;            // eta = (sres / zres)^(1/4)
     double eta_square;     // eta^2 = (sres / zres)^(1/2)
     Eigen::VectorXd q;     // = wbar(2:end)
-    Eigen::VectorXi Didx;  // indices for D
     double u0;             // eta
     double u1;             // u = [u0; u1 * q]
     double v1;             // v = [0; v1 * q]
+};
+
+struct Work
+{
+    void allocate(size_t num_var, size_t num_eq, size_t num_ineq);
+    Eigen::VectorXd x;      // Primal variables  size num_var
+    Eigen::VectorXd y;      // Multipliers for equality constaints  size num_eq
+    Eigen::VectorXd z;      // Multipliers for conic inequalities   size num_ineq
+    Eigen::VectorXd s;      // Slacks for conic inequalities        size num_ineq
+    Eigen::VectorXd lambda; // Scaled variable                      size num_ineq
+
+    // Homogeneous embedding
+    double kap; // kappa
+    double tau; // tau
+
+    // Temporary storage
+    double cx, by, hz;
+
+    Information i;
 };
 
 class ECOSEigen
@@ -101,38 +139,13 @@ public:
               const Eigen::VectorXd &b,
               const Eigen::VectorXi &soc_dims);
 
-    void solve();
-    Eigen::VectorXd x; // Primal variables  size num_var
+    exitcode solve();
+
+    const Eigen::VectorXd &solution() const;
 
 private:
-    PositiveCone lp_cone;
-    std::vector<SecondOrderCone> so_cones;
     Settings settings;
-    Information info, best_info;
-
-    Eigen::SparseMatrix<double> G;
-    Eigen::SparseMatrix<double> A;
-    Eigen::VectorXd c;
-    Eigen::VectorXd h;
-    Eigen::VectorXd b;
-
-    Eigen::VectorXd y;      // Multipliers for equality constaints  size num_eq
-    Eigen::VectorXd z;      // Multipliers for conic inequalities   size num_ineq
-    Eigen::VectorXd s;      // Slacks for conic inequalities        size num_ineq
-    Eigen::VectorXd lambda; // Scaled variable                      size num_ineq
-
-    Eigen::VectorXd rx; // Residual size num_var
-    Eigen::VectorXd ry; // Residual size num_eq
-    Eigen::VectorXd rz; // Residual size num_ineq
-    double hresx, hresy, hresz;
-    double rt;
-
-    // Norm iterates
-    double nx, ny, nz, ns;
-
-    Eigen::VectorXd x_equil; // Equilibration vector of size n
-    Eigen::VectorXd A_equil; // Equilibration vector of size num_eq
-    Eigen::VectorXd G_equil; // Equilibration vector of size num_ineq
+    Work w, w_best;
 
     size_t num_var;  // Number of variables (n)
     size_t num_eq;   // Number of equality constraints (p)
@@ -141,37 +154,65 @@ private:
     size_t num_sc;   // Number of second order cone constraints (ncones)
     size_t dim_K;    // Dimension of KKT matrix
 
+    PositiveCone lp_cone;
+    std::vector<SecondOrderCone> so_cones;
+
+    Eigen::SparseMatrix<double> G;
+    Eigen::SparseMatrix<double> A;
+    Eigen::VectorXd c;
+    Eigen::VectorXd h;
+    Eigen::VectorXd b;
+
+    // Residuals
+    Eigen::VectorXd rx; // (size num_var)
+    Eigen::VectorXd ry; // (size num_eq)
+    Eigen::VectorXd rz; // (size num_ineq)
+    double hresx, hresy, hresz;
+    double rt;
+
+    // Norm iterates
+    double nx, ny, nz, ns;
+
+    // Equilibration vectors
+    Eigen::VectorXd x_equil; // (size n)
+    Eigen::VectorXd A_equil; // (size num_eq)
+    Eigen::VectorXd G_equil; // (size num_ineq)
+
     Eigen::VectorXd rhs1; // The right hand side in the first KKT equation.
     Eigen::VectorXd rhs2; // The right hand side in the second KKT equation.
 
-    // Homogeneous embedding
-    double kap; // kappa
-    double tau; // tau
-
     // The problem data scaling parameters
     double resx0, resy0, resz0;
-    double cx, by, hz;
 
     Eigen::VectorXd dsaff_by_W, W_times_dzaff, dsaff;
+
+    Eigen::VectorXd tmp1;
+    Eigen::VectorXd tmp2;
+    Eigen::VectorXd tmp3;
+    Eigen::VectorXd tmp4;
+    Eigen::VectorXd tmp5;
+    Eigen::VectorXd tmp6;
 
     // KKT Matrix
     Eigen::SparseMatrix<double> K;
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
     LDLT_t ldlt;
-
     void setupKKT();
     void initKKT();
-    void updateKKT();
+    bool updateKKT();
     size_t solveKKT(const Eigen::VectorXd &rhs,
                     Eigen::VectorXd &dx,
                     Eigen::VectorXd &dy,
                     Eigen::VectorXd &dz,
                     bool initialize);
 
+    void allocate();
+    void initCones(const Eigen::VectorXi &soc_dims);
+
     void bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s);
     void computeResiduals();
     void updateStatistics();
-    bool checkExitConditions(bool reduced_accuracy);
+    exitcode checkExitConditions(bool reduced_accuracy);
     bool updateScalings(const Eigen::VectorXd &s,
                         const Eigen::VectorXd &z,
                         Eigen::VectorXd &lambda);
@@ -197,3 +238,5 @@ private:
     void setEquilibration();
     void unsetEquilibration();
 };
+
+} // namespace ecos_eigen
