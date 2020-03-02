@@ -25,7 +25,8 @@ struct Settings
     const double stepmax = 0.999;      // largest step allowed, also in affine dir.
     const double sigmamin = 1e-4;      // always do some centering
     const double sigmamax = 1.;        // never fully center
-    const size_t equil_iters = 3;
+    const size_t equil_iters = 3;      // eqilibration iterations
+    const size_t iter_max = 100;       // maximum solver iterations
 };
 
 struct Information

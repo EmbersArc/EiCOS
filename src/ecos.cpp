@@ -398,6 +398,7 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
         (info.gap < abstol or info.relgap < reltol))
     {
         if (settings.verbose)
+        {
             if (reduced_accuracy)
             {
                 print("Close to OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
@@ -408,6 +409,7 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
                 print("OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
                       std::max(info.dres, info.pres), info.relgap, info.gap);
             }
+        }
 
         info.pinf = false;
         info.dinf = false;
@@ -420,6 +422,7 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
              (tau < kap))
     {
         if (settings.verbose)
+        {
             if (reduced_accuracy)
             {
                 print("UNBOUNDED (within feastol={:3.1e}).\n", info.dinfres.value());
@@ -428,6 +431,7 @@ bool ECOSEigen::checkExitConditions(bool reduced_accuracy)
             {
                 print("Close to UNBOUNDED (within feastol={:3.1e}).\n", info.dinfres.value());
             }
+        }
 
         info.pinf = false;
         info.dinf = true;
@@ -817,13 +821,15 @@ void ECOSEigen::solve()
     info.step_aff = 0;
     info.pinf = false;
     info.dinf = false;
+    info.iter_max = settings.iter_max;
 
-    bool done = false;
     for (info.iter = 0; info.iter < info.iter_max; info.iter++)
     {
         computeResiduals();
+
         updateStatistics();
-        done = checkExitConditions(false);
+
+        bool done = checkExitConditions(false);
 
         if (done)
         {
@@ -1119,7 +1125,7 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
         const double sigmanorm = sigma.tail(sc.dim - 1).norm() - sigma(0);
 
         /* Update alpha */
-        const double conic_step = std::max({0., sigmanorm, rhonorm, conic_step});
+        const double conic_step = std::max({0., sigmanorm, rhonorm});
 
         if (conic_step != 0.)
         {
@@ -1168,8 +1174,8 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     for (k_ref = 0; k_ref <= settings.nitref; k_ref++)
     {
         /* Copy solution into arrays */
-        dx = x.head(num_var);
-        dy = x.segment(num_var, num_eq);
+        const Eigen::VectorXd &dx = x.head(num_var);
+        const Eigen::VectorXd &dy = x.segment(num_var, num_eq);
         dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
         size_t dz_index = num_pc;
         size_t x_index = num_var + num_eq + num_pc;
@@ -1196,7 +1202,6 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         /* Error on dy */
         /* ey = by - A * dx */
         Eigen::VectorXd ey = by;
-        ey.resize(num_eq);
         if (num_eq > 0)
         {
             ey -= A * dx;
