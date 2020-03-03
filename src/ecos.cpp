@@ -18,6 +18,57 @@ void Work::allocate(size_t num_var, size_t num_eq, size_t num_ineq)
     lambda.resize(num_ineq);
 }
 
+/**
+ * Compares stats of two iterates with each other.
+ * Returns true if this is better than other, false otherwise.
+ */
+bool Information::operator>(Information &other) const
+{
+    if (pinfres.has_value() and kapovert > 1.)
+    {
+        if (other.pinfres.has_value())
+        {
+            if ((gap > 0 and other.gap > 0 and gap < other.gap) and
+                (pinfres > 0 and pinfres < other.pres) and
+                (mu > 0 and mu < other.mu))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if ((gap > 0 and other.gap > 0 and gap < other.gap) and
+                (mu > 0 and mu < other.mu))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+    else
+    {
+        if ((gap > 0 && other.gap > 0 && gap < other.gap) &&
+            (pres > 0 && pres < other.pres) &&
+            (dres > 0 && dres < other.dres) &&
+            (kapovert > 0 && kapovert < other.kapovert) &&
+            (mu > 0 && mu < other.mu))
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+}
+
 void printSparseMatrix(const Eigen::SparseMatrix<double> &m)
 {
     for (long j = 0; j < m.cols(); j++)
@@ -406,7 +457,7 @@ void ECOSEigen::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
  *
  * If none of the exit tests are met, the function returns NOT_CONVERGED_YET.
  * This should not be an exitflag that is ever returned to the outside world.
- **/
+ */
 exitcode ECOSEigen::checkExitConditions(bool reduced_accuracy)
 {
     double feastol;
@@ -532,7 +583,7 @@ void ECOSEigen::computeResiduals()
     * hrz =  s + G * x             rz = hrz - tau * h      hresz = ||rz||_2
     * 
     * rt = kappa + c' * x + b' * y + h' * z
-    **/
+    */
 
     /* rx = -A' * y - G' * z - tau * c */
     const Eigen::SparseMatrix<double> Gt = G.transpose();
@@ -753,7 +804,7 @@ exitcode ECOSEigen::solve()
     *   [ b ]
     *   [ h ]
     * 
-    **/
+    */
     rhs1.setZero();
     rhs1.segment(num_var, num_eq) = b;
     rhs1.segment(num_var + num_eq, num_pc) = h.head(num_pc);
@@ -775,7 +826,7 @@ exitcode ECOSEigen::solve()
     *   [ 0 ]
     *   [ 0 ]
     * 
-    **/
+    */
     rhs2.setZero();
     rhs2.head(num_var) = -c;
     if constexpr (debug_printing)
@@ -820,7 +871,7 @@ exitcode ECOSEigen::solve()
      *        (  r + (1 + alphap) * e    otherwise
      * 
      * where alphap = inf{ alpha | r + alpha * e >= 0 }
-	 **/
+	 */
 
     /* Solve for RHS [0; b; h] */
     Eigen::VectorXd dx1(num_var);
@@ -854,7 +905,7 @@ exitcode ECOSEigen::solve()
      *        (  zbar + (1 + alphad) * e    otherwise
      * 
 	 * where alphad = inf{ alpha | zbar + alpha * e >= 0 }
-	 **/
+	 */
 
     /* Solve for RHS [-c; 0; 0] */
     Eigen::VectorXd dx2(num_var);
@@ -875,7 +926,7 @@ exitcode ECOSEigen::solve()
     * [ 0 ]    [-c ] 
     * [ b ] -> [ b ] 
     * [ h ]    [ h ] 
-    **/
+    */
     rhs1.head(num_var) = -c;
 
     /* other variables */
@@ -890,8 +941,10 @@ exitcode ECOSEigen::solve()
 
     double pres_prev;
 
+    w.i.iter = 0;
+
     // Main interior point loop
-    for (w.i.iter = 0; w.i.iter < w.i.iter_max; w.i.iter++)
+    while (true)
     {
         computeResiduals();
 
@@ -912,10 +965,11 @@ exitcode ECOSEigen::solve()
             if (settings.verbose)
             {
                 print("Unreliable search direction detected, recovering best iterate ({}) and stopping.\n",
-                      0); // TODO
+                      w_best.i.iter);
             }
 
-            // TODO: restoreBestIterate();
+            /* Restore best iterate */
+            w = w_best;
 
             /* Determine whether we have reached at least reduced accuracy */
             code = checkExitConditions(true);
@@ -950,17 +1004,18 @@ exitcode ECOSEigen::solve()
              *  (i) min step size, in which case we assume we won't make progress any more, and
              * (ii) maximum number of iterations reached
              * If these two are not fulfilled, another iteration will be made.
-             **/
+             */
 
             /* Did the line search cock up? (zero step length) */
             if (w.i.iter > 0 and w.i.step == settings.stepmin * settings.gamma)
             {
                 if (settings.verbose)
                 {
-                    print("No further progress possible, recovering best iterate ({}) and stopping.", 0); // TODO
+                    print("No further progress possible, recovering best iterate ({}) and stopping.", w_best.i.iter);
                 }
 
-                // TODO: restoreBestIterate();
+                /* Restore best iterate */
+                w = w_best;
 
                 /* Determine whether we have reached reduced precision */
                 code = checkExitConditions(true);
@@ -977,7 +1032,7 @@ exitcode ECOSEigen::solve()
                 break;
             }
             /* MAXIT reached? */
-            else if (w.i.iter == w.i.iter_max)
+            else if (w.i.iter == w.i.iter_max - 1)
             {
                 return exitcode::MAXIT;
             }
@@ -986,6 +1041,21 @@ exitcode ECOSEigen::solve()
         {
             /* Full precision has been reached, stop solver */
             break;
+        }
+
+        /**
+         * SAFEGUARD:
+         * Check whether current iterate is worth keeping as the best solution so far,
+         * before doing another iteration
+         */
+        if (w.i.iter == 0)
+        {
+            /* We're at the first iterate, so there's nothing to compare yet */
+            w_best = w;
+        }
+        else if (w.i > w_best.i)
+        {
+            w_best = w;
         }
 
         updateScalings(w.s, w.z, w.lambda);
@@ -1081,6 +1151,8 @@ exitcode ECOSEigen::solve()
 
         w.kap += w.i.step * dkap;
         w.tau += w.i.step * dtau;
+
+        w.i.iter++;
     }
 
     /* scale variables back */
@@ -1135,10 +1207,6 @@ void ECOSEigen::RHS_combined()
 
     /* copy in RHS */
     const double one_minus_sigma = 1. - w.i.sigma;
-
-    // print("one_minus_sigma: \n{}\n", one_minus_sigma);
-    // print("ds1: \n{}\n", ds1);
-    // print("rz: \n{}\n", rz);
 
     rhs2.head(num_var + num_eq) *= one_minus_sigma;
     rhs2.segment(num_var + num_eq, num_pc) = -one_minus_sigma * rz.head(num_pc) +
@@ -1648,7 +1716,7 @@ void ECOSEigen::setupKKT()
      *               ^ dimension of positive contraints
      * 
      *  Only the upper triangular part is constructed here.
-     **/
+     */
     K.resize(dim_K, dim_K);
 
     Eigen::SparseMatrix<double> At = A.transpose();
@@ -1749,7 +1817,7 @@ void ECOSEigen::setupKKT()
          *    [ * * * * * * *   -1 ]
          *
          *  Only the upper triangular part is constructed here.
-         **/
+         */
         for (const SecondOrderCone &sc : so_cones)
         {
             // D

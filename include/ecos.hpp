@@ -72,6 +72,8 @@ struct Information
     size_t nitref1;
     size_t nitref2;
     size_t nitref3;
+
+    bool operator>(Information &other) const;
 };
 
 struct PositiveCone
