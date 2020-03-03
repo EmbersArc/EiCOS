@@ -7,19 +7,17 @@ namespace ecos_eigen
 
 enum class exitcode
 {
-    OPTIMAL,           /* Problem solved to optimality              */
-    PRIMAL_INFEASIBLE, /* Found certificate of primal infeasibility */
-    DUAL_INFEASIBLE,   /* Found certificate of dual infeasibility   */
-    INACC_OFFSET,      /* Offset exitflag at inaccurate results     */
-    MAXIT,             /* Maximum number of iterations reached      */
-    NUMERICS,          /* Search direction unreliable               */
-    OUTCONE,           /* s or z got outside the cone, numerics?    */
-    SIGINT,            /* solver interrupted by a signal/ctrl-c     */
-    FATAL,             /* Unknown problem in solver                 */
-    CLOSE_TO_OPTIMAL,
-    CLOSE_TO_PRIMAL_INFEASIBLE,
-    CLOSE_TO_DUAL_INFEASIBLE,
-    NOT_CONVERGED_YET
+    OPTIMAL = 0,           /* Problem solved to optimality              */
+    PRIMAL_INFEASIBLE = 1, /* Found certificate of primal infeasibility */
+    DUAL_INFEASIBLE = 2,   /* Found certificate of dual infeasibility   */
+    MAXIT = -1,            /* Maximum number of iterations reached      */
+    NUMERICS = -2,         /* Search direction unreliable               */
+    OUTCONE = -3,          /* s or z got outside the cone, numerics?    */
+    FATAL = -7,            /* Unknown problem in solver                 */
+    CLOSE_TO_OPTIMAL = 10,
+    CLOSE_TO_PRIMAL_INFEASIBLE = 11,
+    CLOSE_TO_DUAL_INFEASIBLE = 12,
+    NOT_CONVERGED_YET = -87
 };
 
 const bool debug_printing = false;
@@ -61,7 +59,7 @@ struct Information
     std::optional<double> pinfres;
     std::optional<double> dinfres;
     double gap;
-    double relgap;
+    std::optional<double> relgap;
     double sigma;
     double mu;
     double step;
@@ -119,19 +117,32 @@ struct Work
 
 class ECOSEigen
 {
-    // n:       Number of variables.
-    // m:       Number of inequality constraints.
-    // p:       Number of equality constraints.
-    // l:       The dimension of the positive orthant, i.e. in Gx+s=h, s in K.
-    // The first l elements of s are >=0, ncones is the number of second-order cones present in K.
-    // ncones:  Number of second order cones in K.
-    // q:       Vector of dimesions of each cone constraint in K.
-
-    // A(p,n):  Equality constraint matrix.
-    // b(p):    Equality constraint vector.
-    // G(m,n):  Generalized inequality matrix.
-    // h(m):    Generalized inequality vector.
-    // c(n):    Variable weights.
+    /** 
+     * Solves
+     * 
+     * min  c'*x
+     * s.t. A*x = b
+     *      G*x <=_K h
+     * 
+     * where the last inequality is generalized, i.e. h - G*x belongs to the cone K. 
+     * ECOS supports the positive orthant R_+, second-order cones Q_n defined as
+     * 
+     * Q_n = { (t,x) | t >= || x ||_2 } 
+     * 
+     * n:       Number of variables.
+     * m:       Number of inequality constraints.
+     * p:       Number of equality constraints.
+     * l:       The dimension of the positive orthant, i.e. in Gx+s=h, s in K.
+     * The first l elements of s are >=0, ncones is the number of second-order cones present in K.
+     * ncones:  Number of second order cones in K.
+     * q:       Vector of dimesions of each cone constraint in K.
+     * 
+     * A(p,n):  Equality constraint matrix.
+     * b(p):    Equality constraint vector.
+     * G(m,n):  Generalized inequality matrix.
+     * h(m):    Generalized inequality vector.
+     * c(n):    Variable weights.
+     */
 
 public:
     ECOSEigen(const Eigen::SparseMatrix<double> &G,
@@ -141,11 +152,24 @@ public:
               const Eigen::VectorXd &b,
               const Eigen::VectorXi &soc_dims);
 
+    // traditional interface for compatibility
+    ECOSEigen(int n, int m, int p, int l, int ncones, int *q,
+              double *Gpr, int *Gjc, int *Gir,
+              double *Apr, int *Ajc, int *Air,
+              double *c, double *h, double *b);
+
     exitcode solve();
 
     const Eigen::VectorXd &solution() const;
 
 private:
+    void build(const Eigen::SparseMatrix<double> &G,
+               const Eigen::SparseMatrix<double> &A,
+               const Eigen::VectorXd &c,
+               const Eigen::VectorXd &h,
+               const Eigen::VectorXd &b,
+               const Eigen::VectorXi &soc_dims);
+
     Settings settings;
     Work w, w_best;
 

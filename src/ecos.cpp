@@ -80,6 +80,105 @@ void printSparseMatrix(const Eigen::SparseMatrix<double> &m)
     }
 }
 
+ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
+                     const Eigen::SparseMatrix<double> &A,
+                     const Eigen::VectorXd &c,
+                     const Eigen::VectorXd &h,
+                     const Eigen::VectorXd &b,
+                     const Eigen::VectorXi &soc_dims)
+{
+    build(G, A, c, h, b, soc_dims);
+}
+
+ECOSEigen::ECOSEigen(int n, int m, int p, int /* l */, int ncones, int *q,
+                     double *Gpr, int *Gjc, int *Gir,
+                     double *Apr, int *Ajc, int *Air,
+                     double *c, double *h, double *b)
+{
+    Eigen::SparseMatrix<double> G_;
+    Eigen::SparseMatrix<double> A_;
+    Eigen::VectorXd c_;
+    Eigen::VectorXd h_;
+    Eigen::VectorXd b_;
+    Eigen::VectorXi q_;
+
+    if (Gpr and Gjc and Gir)
+    {
+        G_ = Eigen::Map<Eigen::SparseMatrix<double>>(m, n, Gjc[n], Gjc, Gir, Gpr);
+        q_ = Eigen::Map<Eigen::VectorXi>(q, ncones);
+        h_ = Eigen::Map<Eigen::VectorXd>(h, m);
+    }
+    if (Apr and Ajc and Air)
+    {
+        A_ = Eigen::Map<Eigen::SparseMatrix<double>>(p, n, Ajc[n], Ajc, Air, Apr);
+        b_ = Eigen::Map<Eigen::VectorXd>(b, p);
+    }
+    if (c)
+    {
+        c_ = Eigen::Map<Eigen::VectorXd>(c, n);
+    }
+
+    build(G_, A_, c_, h_, b_, q_);
+}
+
+void ECOSEigen::build(const Eigen::SparseMatrix<double> &G,
+                      const Eigen::SparseMatrix<double> &A,
+                      const Eigen::VectorXd &c,
+                      const Eigen::VectorXd &h,
+                      const Eigen::VectorXd &b,
+                      const Eigen::VectorXi &soc_dims)
+{
+    this->G = G;
+    this->A = A;
+    this->c = c;
+    this->h = h;
+    this->b = b;
+
+    // Dimensions
+    if (A.cols() > 0 and G.cols() > 0)
+    {
+        assert(A.cols() == G.cols());
+    }
+    num_var = std::max(A.cols(), G.cols());
+    num_eq = A.rows();
+    num_ineq = G.rows();
+    num_pc = num_ineq - soc_dims.sum();
+    num_sc = soc_dims.size();
+
+    /**
+     *  Dimension of KKT matrix
+     *   =   # variables
+     *     + # equality constraints
+     *     + # inequality constraints
+     *     + 2 * # second order cones (expansion of SOC scalings)
+     */
+    dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
+
+    initCones(soc_dims);
+
+    allocate();
+
+    print("- - - - - - - - - - - - - - -\n");
+    print("|      Problem summary      |\n");
+    print("- - - - - - - - - - - - - - -\n");
+    print("    Primal variables:  {}\n", num_var);
+    print("Equality constraints:  {}\n", num_eq);
+    print("     Conic variables:  {}\n", num_ineq);
+    print("- - - - - - - - - - - - - - -\n");
+    print("  Size of LP cone:     {}\n", num_pc);
+    print("  Number of SOCs:      {}\n", num_sc);
+    print("- - - - - - - - - - - - - - -\n");
+    for (size_t i = 0; i < num_sc; i++)
+    {
+        print("  Size of SOC #{}:      {}\n", i + 1, so_cones[i].dim);
+    }
+    print("- - - - - - - - - - - - - - -\n");
+
+    setEquilibration();
+
+    setupKKT();
+}
+
 void ECOSEigen::allocate()
 {
     // Allocate work struct
@@ -126,59 +225,6 @@ void ECOSEigen::initCones(const Eigen::VectorXi &soc_dims)
         sc.eta = 0.;
         sc.a = 0.;
     }
-}
-
-ECOSEigen::ECOSEigen(const Eigen::SparseMatrix<double> &G,
-                     const Eigen::SparseMatrix<double> &A,
-                     const Eigen::VectorXd &c,
-                     const Eigen::VectorXd &h,
-                     const Eigen::VectorXd &b,
-                     const Eigen::VectorXi &soc_dims)
-    : G(G), A(A), c(c), h(h), b(b)
-{
-    // Dimensions
-    if (A.cols() > 0 and G.cols() > 0)
-    {
-        assert(A.cols() == G.cols());
-    }
-    num_var = std::max(A.cols(), G.cols());
-    num_eq = A.rows();
-    num_ineq = G.rows();
-    num_pc = num_ineq - soc_dims.sum();
-    num_sc = soc_dims.size();
-
-    /**
-     *  Dimension of KKT matrix
-     *   =   # variables
-     *     + # equality constraints
-     *     + # inequality constraints
-     *     + 2 * # second order cones (expansion of SOC scalings)
-     */
-    dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
-
-    initCones(soc_dims);
-
-    allocate();
-
-    print("- - - - - - - - - - - - - - -\n");
-    print("|      Problem summary      |\n");
-    print("- - - - - - - - - - - - - - -\n");
-    print("    Primal variables:  {}\n", num_var);
-    print("Equality constraints:  {}\n", num_eq);
-    print("     Conic variables:  {}\n", num_ineq);
-    print("- - - - - - - - - - - - - - -\n");
-    print("  Size of LP cone:     {}\n", num_pc);
-    print("  Number of SOCs:      {}\n", num_sc);
-    print("- - - - - - - - - - - - - - -\n");
-    for (size_t i = 0; i < num_sc; i++)
-    {
-        print("  Size of SOC #{}:      {}\n", i + 1, so_cones[i].dim);
-    }
-    print("- - - - - - - - - - - - - - -\n");
-
-    setEquilibration();
-
-    setupKKT();
 }
 
 const Eigen::VectorXd &ECOSEigen::solution() const
@@ -490,12 +536,12 @@ exitcode ECOSEigen::checkExitConditions(bool reduced_accuracy)
             if (reduced_accuracy)
             {
                 print("Close to OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
-                      std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
+                      std::max(w.i.dres, w.i.pres), w.i.relgap.value_or(0.), w.i.gap);
             }
             else
             {
                 print("OPTIMAL (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
-                      std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
+                      std::max(w.i.dres, w.i.pres), w.i.relgap.value_or(0.), w.i.gap);
             }
         }
 
@@ -521,11 +567,11 @@ exitcode ECOSEigen::checkExitConditions(bool reduced_accuracy)
         {
             if (reduced_accuracy)
             {
-                print("UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
+                print("Close to UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
             }
             else
             {
-                print("Close to UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
+                print("UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
             }
         }
 
@@ -548,11 +594,11 @@ exitcode ECOSEigen::checkExitConditions(bool reduced_accuracy)
     {
         if (reduced_accuracy)
         {
-            print("PRIMAL INFEASIBLE (within feastol={3.1e}).\n", w.i.pinfres.value());
+            print("Close to PRIMAL INFEASIBLE (within feastol={:3.1e}).\n", w.i.pinfres.value());
         }
         else
         {
-            print("Close to PRIMAL INFEASIBLE (within feastol={3.1e}).\n", w.i.pinfres.value());
+            print("PRIMAL INFEASIBLE (within feastol={:3.1e}).\n", w.i.pinfres.value());
         }
 
         w.i.pinf = true;
@@ -644,9 +690,7 @@ void ECOSEigen::updateStatistics()
     }
     else
     {
-        // relgap is NaN
-        print("relgap is NaN\n");
-        std::exit(-1);
+        w.i.relgap = std::nullopt;
     }
 
     /* Residuals */
@@ -974,7 +1018,7 @@ exitcode ECOSEigen::solve()
             /* Determine whether we have reached at least reduced accuracy */
             code = checkExitConditions(true);
 
-            /* if not, exit anyways */
+            /* If not, exit anyways */
             if (code == exitcode::NOT_CONVERGED_YET)
             {
                 code = exitcode::NUMERICS;
@@ -982,7 +1026,7 @@ exitcode ECOSEigen::solve()
                 if (settings.verbose)
                 {
                     print("\nNUMERICAL PROBLEMS (reached feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
-                          std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
+                          std::max(w.i.dres, w.i.pres), w.i.relgap.value_or(0.), w.i.gap);
                 }
                 break;
             }
@@ -1026,7 +1070,7 @@ exitcode ECOSEigen::solve()
                     if (settings.verbose)
                     {
                         print("\nNUMERICAL PROBLEMS (reached feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).",
-                              std::max(w.i.dres, w.i.pres), w.i.relgap, w.i.gap);
+                              std::max(w.i.dres, w.i.pres), w.i.relgap.value_or(0.), w.i.gap);
                     }
                 }
                 break;
