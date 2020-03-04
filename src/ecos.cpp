@@ -213,6 +213,8 @@ void ECOSEigen::allocate()
     tmp2.resize(dim_K);
     tmp3.resize(dim_K);
     tmp4.resize(dim_K);
+    tmp5.resize(dim_K);
+    tmp6.resize(dim_K);
 
     Gt.reserve(G.nonZeros());
     At.reserve(A.nonZeros());
@@ -222,7 +224,7 @@ void ECOSEigen::allocate()
     {
         KKT_ptr_size += 3 * sc.dim + 1;
     }
-    KKT_ptr.reserve(KKT_ptr_size);
+    KKT_s_ptr.reserve(KKT_ptr_size);
 }
 
 void ECOSEigen::initCones(const Eigen::VectorXi &soc_dims)
@@ -353,7 +355,8 @@ void ECOSEigen::setEquilibration()
         G_equil = G_equil.cwiseProduct(G_tmp);
     }
 
-    /* The c vector is scaled in the solve function */
+    /* Equilibrate the c vector */
+    c = c.cwiseQuotient(x_equil);
 
     /* Equilibrate the b vector */
     b = b.cwiseQuotient(A_equil);
@@ -379,10 +382,12 @@ void ECOSEigen::unsetEquilibration()
     restore(A_equil, x_equil, A);
     restore(G_equil, x_equil, G);
 
-    /* The c vector is unequilibrated in the solve function */
+    /* Unequilibrate the c vector */
+    c = c.cwiseProduct(x_equil);
 
     /* Unequilibrate the b vector */
     b = b.cwiseProduct(A_equil);
+
     /* Unequilibrate the h vector */
     h = h.cwiseProduct(G_equil);
 }
@@ -430,15 +435,13 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         sc.q = (0.5 / gamma) * (sc.skbar.tail(sc.dim - 1) -
                                 sc.zkbar.tail(sc.dim - 1));
         const double w = sc.q.squaredNorm();
-        sc.a = a;
-        sc.w = w;
 
         /* Pre-compute variables needed for KKT matrix (kkt_update uses those) */
         const double c = (1. + a) + w / (1. + a);
         const double d = 1. + 2. / (1. + a) + w / std::pow(1. + a, 2);
 
-        const double d1 = std::max(0., 0.5 * (a * a + w * (1. - std::pow(c, 2) / (1. + w * d))));
-        const double u0_square = a * a + w - d1;
+        const double d1 = std::max(0., 0.5 * (std::pow(a, 2) + w * (1. - std::pow(c, 2) / (1. + w * d))));
+        const double u0_square = std::pow(a, 2) + w - d1;
 
         const double c2byu02 = (c * c) / u0_square;
         if (c2byu02 - d <= 0)
@@ -450,6 +453,8 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         sc.u0 = std::sqrt(u0_square);
         sc.u1 = std::sqrt(c2byu02);
         sc.v1 = std::sqrt(c2byu02 - d);
+        sc.a = a;
+        sc.w = w;
 
         /* increase offset for next cone */
         k += sc.dim;
@@ -716,16 +721,18 @@ void ECOSEigen::updateStatistics()
 
     if (settings.verbose)
     {
+        const std::string line = fmt::format("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}",
+                                             w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu);
         if (w.i.iter == 0)
         {
             print("It     pcost       dcost      gap   pres   dres    k/t    mu     step   sigma     IR\n");
-            print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}    ---    ---   {:2d}/{:2d}  -\n",
-                  w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu, w.i.nitref1, w.i.nitref2);
+            print("{}    ---    ---   {:2d}/{:2d}  -\n", line, w.i.nitref1, w.i.nitref2);
         }
         else
         {
-            print("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:6.4f}  {:2.0e}  {:2d}/{:2d}/{:2d}\n",
-                  w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu, w.i.step, w.i.sigma,
+            print("{}  {:6.4f}  {:2.0e}  {:2d}/{:2d}/{:2d}\n",
+                  line,
+                  w.i.step, w.i.sigma,
                   w.i.nitref1,
                   w.i.nitref2,
                   w.i.nitref3);
@@ -791,7 +798,7 @@ void ECOSEigen::initKKT()
     /* LP cone */
     for (size_t k = 0; k < num_pc; k++)
     {
-        *KKT_ptr[ptr_i++] = -1.;
+        *KKT_s_ptr[ptr_i++] = -1.;
     }
 
     /* Second-order cone */
@@ -800,38 +807,35 @@ void ECOSEigen::initKKT()
         /* D */
         for (size_t k = 0; k < sc.dim; k++)
         {
-            *KKT_ptr[ptr_i++] = -1.;
+            *KKT_s_ptr[ptr_i++] = -1.;
         }
 
         /* -1 on diagonal */
-        *KKT_ptr[ptr_i++] = -1.;
+        *KKT_s_ptr[ptr_i++] = -1.;
 
         /* -v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_ptr[ptr_i++] = 0.;
+            *KKT_s_ptr[ptr_i++] = 0.;
         }
 
         /* 1 on diagonal */
-        *KKT_ptr[ptr_i++] = 1.;
+        *KKT_s_ptr[ptr_i++] = 1.;
 
         /* -u */
-        *KKT_ptr[ptr_i++] = 0.;
+        *KKT_s_ptr[ptr_i++] = 0.;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_ptr[ptr_i++] = 0.;
+            *KKT_s_ptr[ptr_i++] = 0.;
         }
     }
-    assert(ptr_i == KKT_ptr.size());
+    assert(ptr_i == KKT_s_ptr.size());
 }
 
 exitcode ECOSEigen::solve()
 {
 
     exitcode code = exitcode::FATAL;
-
-    // Equilibrate c
-    c = c.cwiseQuotient(x_equil);
 
     initKKT();
 
@@ -1212,7 +1216,6 @@ void ECOSEigen::backscale()
     w.y = w.y.cwiseQuotient(A_equil * w.tau);
     w.z = w.z.cwiseQuotient(G_equil * w.tau);
     w.s = w.s.cwiseProduct(G_equil / w.tau);
-    c = c.cwiseProduct(x_equil);
 }
 
 /**
@@ -1688,40 +1691,40 @@ bool ECOSEigen::updateKKT()
     /* LP cone */
     for (size_t k = 0; k < num_pc; k++)
     {
-        *KKT_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
+        *KKT_s_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
     }
 
     /* Second-order cone */
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
-        *KKT_ptr[ptr_i++] = -sc.eta_square * sc.d1 - settings.deltastat;
+        *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.d1 - settings.deltastat;
 
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_ptr[ptr_i++] = -sc.eta_square - settings.deltastat;
+            *KKT_s_ptr[ptr_i++] = -sc.eta_square - settings.deltastat;
         }
 
         /* diagonal */
-        *KKT_ptr[ptr_i++] = -sc.eta_square;
+        *KKT_s_ptr[ptr_i++] = -sc.eta_square;
 
         /* v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_ptr[ptr_i++] = -sc.eta_square * sc.v1 * sc.q(k - 1);
+            *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.v1 * sc.q(k - 1);
         }
 
         /* diagonal */
-        *KKT_ptr[ptr_i++] = sc.eta_square + settings.deltastat;
+        *KKT_s_ptr[ptr_i++] = sc.eta_square + settings.deltastat;
 
         /* u */
-        *KKT_ptr[ptr_i++] = -sc.eta_square * sc.u0;
+        *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.u0;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_ptr[ptr_i++] = -sc.eta_square * sc.u1 * sc.q(k - 1);
+            *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.u1 * sc.q(k - 1);
         }
     }
-    assert(ptr_i == KKT_ptr.size());
+    assert(ptr_i == KKT_s_ptr.size());
 
     ldlt.factorize(K);
     if (ldlt.info() != Eigen::Success)
@@ -1891,13 +1894,20 @@ void ECOSEigen::setupKKT()
         print("Non-zeros in KKT matrix: {}\n", K.nonZeros());
     }
 
+    cacheIndices();
+}
+
+void ECOSEigen::cacheIndices()
+{
     // Save pointers for fast access
+
+    // SCALING AND RESIDUALS
 
     /* LP cone */
     size_t diag_idx = num_var + num_eq;
     for (size_t k = 0; k < num_pc; k++)
     {
-        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
         diag_idx++;
     }
 
@@ -1905,32 +1915,32 @@ void ECOSEigen::setupKKT()
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
-        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
         diag_idx++;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+            KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
             diag_idx++;
         }
 
         /* diagonal */
-        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
 
         /* v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            KKT_ptr.push_back(&K.coeffRef(diag_idx - sc.dim + k, diag_idx));
+            KKT_s_ptr.push_back(&K.coeffRef(diag_idx - sc.dim + k, diag_idx));
         }
         diag_idx++;
 
         /* diagonal */
-        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
 
         /* u */
-        KKT_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1, diag_idx));
+        KKT_s_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1, diag_idx));
         for (size_t k = 1; k < sc.dim; k++)
         {
-            KKT_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx));
+            KKT_s_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx));
         }
         diag_idx++;
     }
