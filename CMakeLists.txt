@@ -26,8 +26,8 @@ target_compile_options(ecos_eigen PUBLIC "$<$<CONFIG:RELEASE>:${RELEASE_OPTIONS}
 
 target_link_libraries(ecos_eigen Eigen3::Eigen fmt::fmt)
 
-add_executable(runecos src/run.cpp)
-target_link_libraries(runecos ecos_eigen)
+add_executable(run src/run.cpp)
+target_link_libraries(run ecos_eigen)
 
 add_executable(testecos test/ecostester.cpp)
 target_link_libraries(testecos ecos_eigen)
