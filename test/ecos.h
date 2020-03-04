@@ -8,7 +8,7 @@ using idxint = int;
 using pfloat = double;
 using pwork = ecos_eigen::ECOSEigen;
 
-ecos_eigen::ECOSEigen *ECOS_setup(idxint n, idxint m, idxint p, idxint l, idxint ncones, idxint *q, idxint nexc,
+ecos_eigen::ECOSEigen *ECOS_setup(idxint n, idxint m, idxint p, idxint l, idxint ncones, idxint *q, idxint /*nexc*/,
                                   pfloat *Gpr, idxint *Gjc, idxint *Gir,
                                   pfloat *Apr, idxint *Ajc, idxint *Air,
                                   pfloat *c, pfloat *h, pfloat *b)
@@ -22,7 +22,7 @@ idxint ECOS_solve(pwork *work)
     return idxint(work->solve());
 }
 
-void ECOS_cleanup(pwork *work, idxint whatever)
+void ECOS_cleanup(pwork *work, idxint /*whatever*/)
 {
     delete work;
 }

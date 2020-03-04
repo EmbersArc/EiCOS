@@ -20,7 +20,7 @@ enum class exitcode
     NOT_CONVERGED_YET = -87
 };
 
-const bool debug_printing = false;
+constexpr bool debug_printing = false;
 
 struct Settings
 {
@@ -185,6 +185,8 @@ private:
 
     Eigen::SparseMatrix<double> G;
     Eigen::SparseMatrix<double> A;
+    Eigen::SparseMatrix<double> Gt;
+    Eigen::SparseMatrix<double> At;
     Eigen::VectorXd c;
     Eigen::VectorXd h;
     Eigen::VectorXd b;
@@ -223,6 +225,7 @@ private:
     Eigen::SparseMatrix<double> K;
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
     LDLT_t ldlt;
+    std::vector<double *> KKT_ptr; // Pointer to elements for fast update
     void setupKKT();
     void initKKT();
     bool updateKKT();

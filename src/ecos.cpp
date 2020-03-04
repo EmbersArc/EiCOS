@@ -213,6 +213,16 @@ void ECOSEigen::allocate()
     tmp2.resize(dim_K);
     tmp3.resize(dim_K);
     tmp4.resize(dim_K);
+
+    Gt.reserve(G.nonZeros());
+    At.reserve(A.nonZeros());
+
+    size_t KKT_ptr_size = num_pc;
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        KKT_ptr_size += 3 * sc.dim + 1;
+    }
+    KKT_ptr.reserve(KKT_ptr_size);
 }
 
 void ECOSEigen::initCones(const Eigen::VectorXi &soc_dims)
@@ -326,18 +336,10 @@ void ECOSEigen::setEquilibration()
         }
 
         /* Take the square root */
-        for (size_t i = 0; i < num_var; i++)
-        {
-            x_tmp(i) = std::fabs(x_tmp(i)) < 1e-6 ? 1. : std::sqrt(x_tmp(i));
-        }
-        for (size_t i = 0; i < num_eq; i++)
-        {
-            A_tmp(i) = std::fabs(A_tmp(i)) < 1e-6 ? 1. : std::sqrt(A_tmp(i));
-        }
-        for (size_t i = 0; i < num_ineq; i++)
-        {
-            G_tmp(i) = std::fabs(G_tmp(i)) < 1e-6 ? 1. : std::sqrt(G_tmp(i));
-        }
+        auto sqrt_op = [](const double a) { return std::fabs(a) < 1e-6 ? 1. : std::sqrt(a); };
+        x_tmp = x_tmp.unaryExpr(sqrt_op);
+        A_tmp = A_tmp.unaryExpr(sqrt_op);
+        G_tmp = G_tmp.unaryExpr(sqrt_op);
 
         /* Equilibrate the matrices */
         equilibrateRows(A_tmp, A);
@@ -632,8 +634,6 @@ void ECOSEigen::computeResiduals()
     */
 
     /* rx = -A' * y - G' * z - tau * c */
-    const Eigen::SparseMatrix<double> Gt = G.transpose();
-    const Eigen::SparseMatrix<double> At = A.transpose();
     rx = -Gt * w.z;
     if (num_eq > 0)
     {
@@ -786,14 +786,12 @@ void ECOSEigen::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
 
 void ECOSEigen::initKKT()
 {
-    // TODO: Faster element access.
+    size_t ptr_i = 0;
 
     /* LP cone */
-    size_t diag_idx = num_var + num_eq;
     for (size_t k = 0; k < num_pc; k++)
     {
-        K.coeffRef(diag_idx, diag_idx) = -1.;
-        diag_idx++;
+        *KKT_ptr[ptr_i++] = -1.;
     }
 
     /* Second-order cone */
@@ -802,33 +800,29 @@ void ECOSEigen::initKKT()
         /* D */
         for (size_t k = 0; k < sc.dim; k++)
         {
-            K.coeffRef(diag_idx, diag_idx) = -1.;
-            diag_idx++;
+            *KKT_ptr[ptr_i++] = -1.;
         }
 
         /* -1 on diagonal */
-        K.coeffRef(diag_idx, diag_idx) = -1.;
+        *KKT_ptr[ptr_i++] = -1.;
 
         /* -v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(diag_idx - sc.dim + k, diag_idx) = 0.;
+            *KKT_ptr[ptr_i++] = 0.;
         }
-        diag_idx++;
 
         /* 1 on diagonal */
-        K.coeffRef(diag_idx, diag_idx) = 1.;
+        *KKT_ptr[ptr_i++] = 1.;
 
         /* -u */
-        K.coeffRef(diag_idx - sc.dim - 1, diag_idx) = 0.;
+        *KKT_ptr[ptr_i++] = 0.;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx) = 0.;
+            *KKT_ptr[ptr_i++] = 0.;
         }
-        diag_idx++;
     }
-    assert(diag_idx == dim_K);
-    assert(K.isCompressed());
+    assert(ptr_i == KKT_ptr.size());
 }
 
 exitcode ECOSEigen::solve()
@@ -983,7 +977,7 @@ exitcode ECOSEigen::solve()
     w.i.dinf = false;
     w.i.iter_max = settings.iter_max;
 
-    double pres_prev;
+    double pres_prev = std::numeric_limits<double>::max();
 
     w.i.iter = 0;
 
@@ -1419,9 +1413,6 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 {
     Eigen::VectorXd x = ldlt.solve(rhs);
 
-    Eigen::SparseMatrix<double> Gt = G.transpose();
-    Eigen::SparseMatrix<double> At = A.transpose();
-
     const double error_threshold = (1. + rhs.lpNorm<Eigen::Infinity>()) * settings.linsysacc;
 
     double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
@@ -1512,7 +1503,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
             ez(ez_index++) = 0.;
             ez(ez_index++) = 0.;
         }
-        assert(ez_index == mtilde and dz_index == num_ineq and dz_index == num_ineq);
+        assert(ez_index == mtilde and dz_index == num_ineq);
 
         const Eigen::VectorXd &dz_true = x.tail(mtilde);
         if (initialize)
@@ -1692,51 +1683,45 @@ void ECOSEigen::RHS_affine()
 
 bool ECOSEigen::updateKKT()
 {
-    // TODO: Faster element access.
+    size_t ptr_i = 0;
 
     /* LP cone */
-    size_t diag_idx = num_var + num_eq;
     for (size_t k = 0; k < num_pc; k++)
     {
-        K.coeffRef(diag_idx, diag_idx) = -lp_cone.v(k) - settings.deltastat;
-        diag_idx++;
+        *KKT_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
     }
 
     /* Second-order cone */
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
-        K.coeffRef(diag_idx, diag_idx) = -sc.eta_square * sc.d1 - settings.deltastat;
-        diag_idx++;
+        *KKT_ptr[ptr_i++] = -sc.eta_square * sc.d1 - settings.deltastat;
+
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(diag_idx, diag_idx) = -sc.eta_square - settings.deltastat;
-            diag_idx++;
+            *KKT_ptr[ptr_i++] = -sc.eta_square - settings.deltastat;
         }
 
         /* diagonal */
-        K.coeffRef(diag_idx, diag_idx) = -sc.eta_square;
+        *KKT_ptr[ptr_i++] = -sc.eta_square;
 
         /* v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(diag_idx - sc.dim + k, diag_idx) = -sc.eta_square * sc.v1 * sc.q(k - 1);
+            *KKT_ptr[ptr_i++] = -sc.eta_square * sc.v1 * sc.q(k - 1);
         }
 
-        diag_idx++;
         /* diagonal */
-        K.coeffRef(diag_idx, diag_idx) = sc.eta_square + settings.deltastat;
+        *KKT_ptr[ptr_i++] = sc.eta_square + settings.deltastat;
 
         /* u */
-        K.coeffRef(diag_idx - sc.dim - 1, diag_idx) = -sc.eta_square * sc.u0;
+        *KKT_ptr[ptr_i++] = -sc.eta_square * sc.u0;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx) = -sc.eta_square * sc.u1 * sc.q(k - 1);
+            *KKT_ptr[ptr_i++] = -sc.eta_square * sc.u1 * sc.q(k - 1);
         }
-        diag_idx++;
     }
-    assert(diag_idx == dim_K);
-    assert(K.isCompressed());
+    assert(ptr_i == KKT_ptr.size());
 
     ldlt.factorize(K);
     if (ldlt.info() != Eigen::Success)
@@ -1763,8 +1748,8 @@ void ECOSEigen::setupKKT()
      */
     K.resize(dim_K, dim_K);
 
-    Eigen::SparseMatrix<double> At = A.transpose();
-    Eigen::SparseMatrix<double> Gt = G.transpose();
+    Gt = G.transpose();
+    At = A.transpose();
 
     // Number of non-zeros in KKT matrix
     size_t K_nonzeros = At.nonZeros() + Gt.nonZeros();
@@ -1899,13 +1884,58 @@ void ECOSEigen::setupKKT()
     K.setFromTriplets(K_triplets.begin(), K_triplets.end());
 
     assert(size_t(K.nonZeros()) == K_nonzeros);
-    assert(K.isCompressed());
 
     if constexpr (debug_printing)
     {
         print("Dimension of KKT matrix: {}\n", dim_K);
         print("Non-zeros in KKT matrix: {}\n", K.nonZeros());
     }
+
+    // Save pointers for fast access
+
+    /* LP cone */
+    size_t diag_idx = num_var + num_eq;
+    for (size_t k = 0; k < num_pc; k++)
+    {
+        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        diag_idx++;
+    }
+
+    /* Second-order cone */
+    for (const SecondOrderCone &sc : so_cones)
+    {
+        /* D */
+        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        diag_idx++;
+        for (size_t k = 1; k < sc.dim; k++)
+        {
+            KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+            diag_idx++;
+        }
+
+        /* diagonal */
+        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+
+        /* v */
+        for (size_t k = 1; k < sc.dim; k++)
+        {
+            KKT_ptr.push_back(&K.coeffRef(diag_idx - sc.dim + k, diag_idx));
+        }
+        diag_idx++;
+
+        /* diagonal */
+        KKT_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+
+        /* u */
+        KKT_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1, diag_idx));
+        for (size_t k = 1; k < sc.dim; k++)
+        {
+            KKT_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx));
+        }
+        diag_idx++;
+    }
+
+    assert(diag_idx == dim_K);
 }
 
 } // namespace ecos_eigen
