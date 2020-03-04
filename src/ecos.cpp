@@ -209,13 +209,6 @@ void ECOSEigen::allocate()
 
     K.reserve(dim_K);
 
-    tmp1.resize(dim_K);
-    tmp2.resize(dim_K);
-    tmp3.resize(dim_K);
-    tmp4.resize(dim_K);
-    tmp5.resize(dim_K);
-    tmp6.resize(dim_K);
-
     Gt.reserve(G.nonZeros());
     At.reserve(A.nonZeros());
 
@@ -296,12 +289,9 @@ void ECOSEigen::setEquilibration()
     A_equil.resize(num_eq);
     G_equil.resize(num_ineq);
 
-    tmp1.conservativeResize(num_var);
-    tmp2.conservativeResize(num_eq);
-    tmp3.conservativeResize(num_ineq);
-    Eigen::VectorXd &x_tmp = tmp1;
-    Eigen::VectorXd &A_tmp = tmp2;
-    Eigen::VectorXd &G_tmp = tmp3;
+    Eigen::VectorXd x_tmp(num_var);
+    Eigen::VectorXd A_tmp(num_eq);
+    Eigen::VectorXd G_tmp(num_ineq);
 
     /* Initialize equilibration vector to 1 */
     x_equil.setOnes();
@@ -1433,17 +1423,6 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         print("    --------------------------------------------------\n");
     }
 
-    tmp1.conservativeResize(num_var);
-    tmp2.conservativeResize(num_eq);
-    tmp3.conservativeResize(mtilde);
-    tmp4.conservativeResize(dim_K);
-    tmp5.conservativeResize(num_var);
-    Eigen::VectorXd &ex = tmp1;
-    Eigen::VectorXd &ey = tmp2;
-    Eigen::VectorXd &ez = tmp3;
-    Eigen::VectorXd &e = tmp4;
-    Eigen::VectorXd &Gdx = tmp5;
-
     /* Iterative refinement */
     size_t k_ref;
     for (k_ref = 0; k_ref <= settings.nitref; k_ref++)
@@ -1466,7 +1445,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* Error on dx */
         /* ex = bx - A' * dy - G' * dz */
-        ex = bx - Gt * dz;
+        Eigen::VectorXd ex = bx - Gt * dz;
         if (num_eq > 0)
         {
             ex -= At * dy;
@@ -1476,7 +1455,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* Error on dy */
         /* ey = by - A * dx */
-        ey = by;
+        Eigen::VectorXd ey = by;
         if (num_eq > 0)
         {
             ey -= A * dx;
@@ -1486,9 +1465,10 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* Error on ez */
         /* ez = bz - G * dx + V * dz_true */
-        Gdx = G * dx;
+        Eigen::VectorXd Gdx = G * dx;
 
         /* LP cone */
+        Eigen::VectorXd ez(mtilde);
         ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc) +
                           settings.deltastat * dz.head(num_pc);
 
@@ -1515,7 +1495,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         }
         else
         {
-            scale2add2(dz_true, ez);
+            scale2add(dz_true, ez);
         }
         const double nez = ez.lpNorm<Eigen::Infinity>();
 
@@ -1539,7 +1519,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         }
 
         /* Check whether to stop refining */
-        if (k_ref == settings.nitref - 1 or
+        if (k_ref == settings.nitref or
             (nerr < error_threshold) or
             (k_ref > 0 and nerr_prev < settings.irerrfact * nerr))
         {
@@ -1548,6 +1528,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         nerr_prev = nerr;
 
         /* Solve for refinement */
+        Eigen::VectorXd e(dim_K);
         e << ex, ey, ez;
         dx_ref = ldlt.solve(e);
 
@@ -1574,55 +1555,12 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
 /**
  *                                            [ D   v   u  ]
- * Slow multiplication with V = W^2 = eta^2 * [ v'  1   0  ] 
- *                                            [ u'  0  -1  ]
- * Computes y += W^2 * x;
- * 
- */
-void ECOSEigen::scale2add1(const Eigen::VectorXd &x, Eigen::VectorXd &y)
-{
-    /* LP cone */
-    y.head(num_pc) += lp_cone.v.cwiseProduct(x.head(num_pc));
-
-    /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
-    {
-        const size_t dim = sc.dim + 2;
-        Eigen::MatrixXd W_squared = Eigen::MatrixXd::Identity(dim, dim);
-
-        // diagonal
-        W_squared(0, 0) = sc.d1;
-        W_squared(dim - 1, dim - 1) = -1.;
-
-        // v
-        W_squared.col(dim - 2).segment(1, sc.dim - 1).setConstant(sc.v1);
-        // v'
-        W_squared.row(dim - 2).segment(1, sc.dim - 1).setConstant(sc.v1);
-
-        // u
-        W_squared.col(dim - 1)(0) = sc.u0;
-        W_squared.col(dim - 1).segment(1, sc.dim - 1).setConstant(sc.u1);
-        // u'
-        W_squared.row(dim - 1)(0) = sc.u0;
-        W_squared.row(dim - 1).segment(1, sc.dim - 1).setConstant(sc.u1);
-
-        W_squared *= sc.eta_square;
-
-        y.segment(cone_start, dim) += W_squared * x.segment(cone_start, dim);
-
-        cone_start += dim;
-    }
-}
-
-/**
- *                                            [ D   v   u  ]
  * Fast multiplication with V = W^2 = eta^2 * [ v'  1   0  ] 
  *                                            [ u'  0  -1  ]
  * Computes y += W^2 * x;
  * 
  */
-void ECOSEigen::scale2add2(const Eigen::VectorXd &x, Eigen::VectorXd &y)
+void ECOSEigen::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
 {
     /* LP cone */
     y.head(num_pc) += lp_cone.v.cwiseProduct(x.head(num_pc));

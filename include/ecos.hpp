@@ -214,18 +214,11 @@ private:
 
     Eigen::VectorXd dsaff_by_W, W_times_dzaff, dsaff;
 
-    Eigen::VectorXd tmp1;
-    Eigen::VectorXd tmp2;
-    Eigen::VectorXd tmp3;
-    Eigen::VectorXd tmp4;
-    Eigen::VectorXd tmp5;
-    Eigen::VectorXd tmp6;
-
     // KKT Matrix
     Eigen::SparseMatrix<double> K;
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
     LDLT_t ldlt;
-    std::vector<double *> KKT_s_ptr; // Pointer to scaling/regularization elements for fast update
+    std::vector<double *> KKT_s_ptr;  // Pointer to scaling/regularization elements for fast update
     std::vector<double *> KKT_ag_ptr; // Pointer to A/G elements for fast update
     void setupKKT();
     void initKKT();
@@ -248,8 +241,7 @@ private:
                         Eigen::VectorXd &lambda);
     void RHS_affine();
     void RHS_combined();
-    void scale2add1(const Eigen::VectorXd &x, Eigen::VectorXd &y);
-    void scale2add2(const Eigen::VectorXd &x, Eigen::VectorXd &y);
+    void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
     void scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda);
     double lineSearch(Eigen::VectorXd &lambda,
                       Eigen::VectorXd &ds,
