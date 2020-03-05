@@ -50,6 +50,7 @@ static char *all_tests()
 {
     mu_run_test(test_MPC01);
     mu_run_test(test_MPC02);
+    mu_run_test(test_unboundedMaxSqrt);
     mu_run_test(test_feas);
     mu_run_test(test_unboundedLP1);
     mu_run_test(test_infeasible1);
