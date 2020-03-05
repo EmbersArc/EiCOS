@@ -28,9 +28,9 @@ bool Information::operator>(Information &other) const
     {
         if (other.pinfres.has_value())
         {
-            if ((gap > 0 and other.gap > 0 and gap < other.gap) and
-                (pinfres > 0 and pinfres < other.pres) and
-                (mu > 0 and mu < other.mu))
+            if ((gap > 0. and other.gap > 0. and gap < other.gap) and
+                (pinfres > 0. and pinfres < other.pres) and
+                (mu > 0. and mu < other.mu))
             {
                 return true;
             }
@@ -41,8 +41,8 @@ bool Information::operator>(Information &other) const
         }
         else
         {
-            if ((gap > 0 and other.gap > 0 and gap < other.gap) and
-                (mu > 0 and mu < other.mu))
+            if ((gap > 0. and other.gap > 0. and gap < other.gap) and
+                (mu > 0. and mu < other.mu))
             {
                 return true;
             }
@@ -54,11 +54,11 @@ bool Information::operator>(Information &other) const
     }
     else
     {
-        if ((gap > 0 && other.gap > 0 && gap < other.gap) &&
-            (pres > 0 && pres < other.pres) &&
-            (dres > 0 && dres < other.dres) &&
-            (kapovert > 0 && kapovert < other.kapovert) &&
-            (mu > 0 && mu < other.mu))
+        if ((gap > 0. && other.gap > 0. && gap < other.gap) &&
+            (pres > 0. && pres < other.pres) &&
+            (dres > 0. && dres < other.dres) &&
+            (kapovert > 0. && kapovert < other.kapovert) &&
+            (mu > 0. && mu < other.mu))
         {
             return true;
         }
@@ -524,7 +524,7 @@ exitcode ECOSEigen::checkExitConditions(bool reduced_accuracy)
     }
 
     /* Optimal? */
-    if ((-w.cx > 0 or -w.by - w.hz >= -abstol) and
+    if ((-w.cx > 0. or -w.by - w.hz >= -abstol) and
         (w.i.pres < feastol and w.i.dres < feastol) and
         (w.i.gap < abstol or w.i.relgap < reltol))
     {
@@ -1336,11 +1336,11 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
     /* tau and kappa */
     const double minus_tau_by_dtau = -tau / dtau;
     const double minus_kap_by_dkap = -kap / dkap;
-    if (minus_tau_by_dtau > 0 and minus_tau_by_dtau < alpha)
+    if (minus_tau_by_dtau > 0. and minus_tau_by_dtau < alpha)
     {
         alpha = minus_tau_by_dtau;
     }
-    if (minus_kap_by_dkap > 0 and minus_kap_by_dkap < alpha)
+    if (minus_kap_by_dkap > 0. and minus_kap_by_dkap < alpha)
     {
         alpha = minus_kap_by_dkap;
     }
