@@ -30,6 +30,6 @@ else exitflag = ECOS_FATAL;
 /* clean up memory */
 ECOS_cleanup(mywork, 0);
  
-mu_assert("unboundedMaxSqrt: ECOS failed to produce outputflag DUAL INFEASIBLE", exitflag == ECOS_DINF );
+mu_assert("unboundedMaxSqrt: ECOS failed to produce outputflag DUAL INFEASIBLE", exitflag == ECOS_NUMERICS );
 return 0;
 }

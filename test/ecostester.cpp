@@ -46,13 +46,15 @@
 
 int tests_run = 0;
 
+#include "timing.hpp"
+
 static char *all_tests()
 {
     mu_run_test(test_MPC01);
     mu_run_test(test_MPC02);
+    mu_run_test(test_unboundedLP1);
     mu_run_test(test_unboundedMaxSqrt);
     mu_run_test(test_feas);
-    mu_run_test(test_unboundedLP1);
     mu_run_test(test_infeasible1);
     mu_run_test(test_lp_25fv47);
     mu_run_test(test_lp_adlittle);
@@ -72,6 +74,7 @@ static char *all_tests()
 
 int main(void)
 {
+    double t0 = tic();
     char *result = all_tests();
     if (result != 0)
     {
@@ -79,9 +82,10 @@ int main(void)
     }
     else
     {
-        printf("ALL TESTS PASSED\n");
+        printf("\nALL TESTS PASSED\n");
     }
     printf("Tests run: %d\n", tests_run);
+    printf("Test time: %f\n", toc(t0));
 
     return result != 0;
 }
