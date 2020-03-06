@@ -22,7 +22,7 @@ void Work::allocate(size_t num_var, size_t num_eq, size_t num_ineq)
  * Compares stats of two iterates with each other.
  * Returns true if this is better than other, false otherwise.
  */
-bool Information::operator>(Information &other) const
+bool Information::isBetterThan(Information &other) const
 {
     if (pinfres.has_value() and kapovert > 1.)
     {
@@ -54,11 +54,11 @@ bool Information::operator>(Information &other) const
     }
     else
     {
-        if ((gap > 0. && other.gap > 0. && gap < other.gap) &&
-            (pres > 0. && pres < other.pres) &&
-            (dres > 0. && dres < other.dres) &&
-            (kapovert > 0. && kapovert < other.kapovert) &&
-            (mu > 0. && mu < other.mu))
+        if ((gap > 0. and other.gap > 0. and gap < other.gap) and
+            (pres > 0. and pres < other.pres) and
+            (dres > 0. and dres < other.dres) and
+            (kapovert > 0. and kapovert < other.kapovert) and
+            (mu > 0. and mu < other.mu))
         {
             return true;
         }
@@ -675,11 +675,11 @@ void ECOSEigen::updateStatistics()
     w.i.dcost = -(w.hz + w.by) / w.tau;
 
     /* Relative duality gap */
-    if (w.i.pcost < 0)
+    if (w.i.pcost < 0.)
     {
         w.i.relgap = w.i.gap / (-w.i.pcost);
     }
-    else if (w.i.dcost > 0)
+    else if (w.i.dcost > 0.)
     {
         w.i.relgap = w.i.gap / w.i.dcost;
     }
@@ -992,7 +992,7 @@ exitcode ECOSEigen::solve()
          * accordingly. If not even reduced precision is reached, ECOS returns the flag ECOS_NUMERICS.
          */
         if (w.i.iter > 0 and
-            (w.i.pres > settings.safeguard * pres_prev or w.i.gap < 0))
+            (w.i.pres > settings.safeguard * pres_prev or w.i.gap < 0.))
         {
             if (settings.verbose)
             {
@@ -1064,9 +1064,61 @@ exitcode ECOSEigen::solve()
                 break;
             }
             /* MAXIT reached? */
-            else if (w.i.iter == w.i.iter_max - 1)
+            else if (w.i.iter == w.i.iter_max)
             {
                 return exitcode::MAXIT;
+                if (settings.verbose)
+                    print("\nMaximum number of iterations reached, ");
+
+                /* Determine whether current iterate is better than what we had so far */
+                if (w.i.isBetterThan(w_best.i))
+                {
+                    if (settings.verbose)
+                        print("stopping.\n");
+                }
+                else
+                {
+                    if (settings.verbose)
+                        print("recovering best iterate ({}) and stopping.\n", w_best.i.iter);
+                    w = w_best;
+                }
+
+                /* Determine whether we have reached reduced precision */
+                code = checkExitConditions(true);
+
+                if (code == exitcode::NOT_CONVERGED_YET)
+                {
+                    code = exitcode::MAXIT;
+                }
+                break;
+            }
+            /* stuck on NAN? */
+            else if (std::isnan(w.i.pcost))
+            {
+                if (settings.verbose)
+                    print("\nReached NaN dead end, \n");
+
+                /* Determine whether current iterate is better than what we had so far */
+                if (w.i.isBetterThan(w_best.i))
+                {
+                    if (settings.verbose)
+                        print("stopping.\n");
+                }
+                else
+                {
+                    if (settings.verbose)
+                        print("recovering best iterate ({}) and stopping.\n", w_best.i.iter);
+                    w = w_best;
+                }
+
+                /* Determine whether we have reached reduced precision */
+                code = checkExitConditions(true);
+                if (code == exitcode::NOT_CONVERGED_YET)
+                {
+                    code = exitcode::NUMERICS;
+                    print("stopping without convergence.\n");
+                }
+                break;
             }
         }
         else
@@ -1085,7 +1137,7 @@ exitcode ECOSEigen::solve()
             /* We're at the first iterate, so there's nothing to compare yet */
             w_best = w;
         }
-        else if (w.i > w_best.i)
+        else if (w.i.isBetterThan(w_best.i))
         {
             w_best = w;
         }
