@@ -730,8 +730,10 @@ void ECOSEigen::updateStatistics()
 
     if (settings.verbose)
     {
-        const std::string line = fmt::format("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}",
-                                             w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu);
+        const std::string line =
+            fmt::format("{:2d}  {:+5.3e}  {:+5.3e}  {:+2.0e}  {:2.0e}  {:2.0e}  {:2.0e}  {:2.0e}",
+                        w.i.iter, w.i.pcost, w.i.dcost, w.i.gap, w.i.pres, w.i.dres, w.i.kapovert, w.i.mu);
+
         if (w.i.iter == 0)
         {
             print("It     pcost       dcost      gap   pres   dres    k/t    mu     step   sigma     IR\n");
@@ -1170,7 +1172,7 @@ exitcode ECOSEigen::solve()
         solveKKT(rhs1, dx1, dy1, dz1, false);
 
         /* Affine Search Direction (predictor, need dsaff and dzaff only) */
-        RHS_affine();
+        RHSaffine();
 
         if constexpr (debug_printing)
             print("Solving for affine search direction.\n");
@@ -1201,11 +1203,12 @@ exitcode ECOSEigen::solve()
         w.i.step_aff = lineSearch(w.lambda, dsaff_by_W, W_times_dzaff, w.tau, dtauaff, w.kap, dkapaff);
 
         /* Centering parameter */
-        const double sigma = std::clamp(std::pow(1. - w.i.step_aff, 3), settings.sigmamin, settings.sigmamax);
+        const double sigma = std::clamp(std::pow(1. - w.i.step_aff, 3),
+                                        settings.sigmamin, settings.sigmamax);
         w.i.sigma = sigma;
 
         /* Combined search direction */
-        RHS_combined();
+        RHScombined();
         if constexpr (debug_printing)
             print("Solving for combined search direction.\n");
         w.i.nitref3 = solveKKT(rhs2, dx2, dy2, dz2, 0);
@@ -1217,9 +1220,9 @@ exitcode ECOSEigen::solve()
         const double dtau = ((1. - sigma) * rt - bkap / w.tau + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
 
         /**
-         * dx = x2 + dtau*x1
-         * dy = y2 + dtau*y1
-         * dz = z2 + dtau*z1
+         * dx = x2 + dtau * x1
+         * dy = y2 + dtau * y1
+         * dz = z2 + dtau * z1
          */
         dx2 += dtau * dx1;
         dy2 += dtau * dy1;
@@ -1276,7 +1279,7 @@ void ECOSEigen::backscale()
 /**
  * Prepares the RHS for computing the combined search direction.
  */
-void ECOSEigen::RHS_combined()
+void ECOSEigen::RHScombined()
 {
     Eigen::VectorXd ds1(num_ineq);
     Eigen::VectorXd ds2(num_ineq);
@@ -1437,13 +1440,15 @@ double ECOSEigen::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen
         Eigen::VectorXd rho(sc.dim);
         rho(0) = lknorminv * lkbar_times_dsk;
         factor = (lkbar_times_dsk + ds(cone_start)) / (lkbar(0) + 1.);
-        rho.tail(sc.dim - 1) = lknorminv * (ds.segment(cone_start + 1, sc.dim - 1) - factor * lkbar.segment(1, sc.dim - 1));
+        rho.tail(sc.dim - 1) = lknorminv * (ds.segment(cone_start + 1, sc.dim - 1) -
+                                            factor * lkbar.segment(1, sc.dim - 1));
         const double rhonorm = rho.tail(sc.dim - 1).norm() - rho(0);
 
         Eigen::VectorXd sigma(sc.dim);
         sigma(0) = lknorminv * lkbar_times_dzk;
         factor = (lkbar_times_dzk + dz(cone_start)) / (lkbar(0) + 1.);
-        sigma.tail(sc.dim - 1) = lknorminv * (dz.segment(cone_start + 1, sc.dim - 1) - factor * lkbar.segment(1, sc.dim - 1));
+        sigma.tail(sc.dim - 1) = lknorminv * (dz.segment(cone_start + 1, sc.dim - 1) -
+                                              factor * lkbar.segment(1, sc.dim - 1));
         const double sigmanorm = sigma.tail(sc.dim - 1).norm() - sigma(0);
 
         /* Update alpha */
@@ -1666,7 +1671,7 @@ void ECOSEigen::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
  * of the scalings for the second-order cone), we need this to prepare
  * the RHS before solving the KKT system in the special format.
  */
-void ECOSEigen::RHS_affine()
+void ECOSEigen::RHSaffine()
 {
     /* LP cone */
     rhs2.head(num_var + num_eq) << rx, -ry;

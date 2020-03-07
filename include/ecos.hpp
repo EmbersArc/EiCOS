@@ -250,8 +250,8 @@ private:
     bool updateScalings(const Eigen::VectorXd &s,
                         const Eigen::VectorXd &z,
                         Eigen::VectorXd &lambda);
-    void RHS_affine();
-    void RHS_combined();
+    void RHSaffine();
+    void RHScombined();
     void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
     void scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda);
     double lineSearch(Eigen::VectorXd &lambda,
