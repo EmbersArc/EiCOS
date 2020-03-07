@@ -1733,9 +1733,9 @@ void ECOSEigen::updateKKTScalings()
 void ECOSEigen::setupKKT()
 {
     /**
-     *      [ 0  A' G' ]
-     *  K = [ A  0  0  ]
-     *      [ G  0  -V ]
+     *      [ 0  A' G']
+     *  K = [ A  0  0 ]
+     *      [ G  0 -V ]
      * 
      *   V = blkdiag(I, blkdiag(I, 1, -1), ...,  blkdiag(I, 1, -1));
      *                    ^   number of second-order cones   ^
