@@ -152,11 +152,21 @@ public:
               const Eigen::VectorXd &b,
               const Eigen::VectorXi &soc_dims);
 
+    void updateData(const Eigen::SparseMatrix<double> &G,
+                    const Eigen::SparseMatrix<double> &A,
+                    const Eigen::VectorXd &c,
+                    const Eigen::VectorXd &h,
+                    const Eigen::VectorXd &b);
+
     // traditional interface for compatibility
     ECOSEigen(int n, int m, int p, int l, int ncones, int *q,
               double *Gpr, int *Gjc, int *Gir,
               double *Apr, int *Ajc, int *Air,
               double *c, double *h, double *b);
+
+    void updateData(double *Gpr, int *Gjc, int *Gir,
+                    double *Apr, int *Ajc, int *Air,
+                    double *c, double *h, double *b);
 
     exitcode solve();
 
@@ -205,6 +215,7 @@ private:
     Eigen::VectorXd x_equil; // (size n)
     Eigen::VectorXd A_equil; // (size num_eq)
     Eigen::VectorXd G_equil; // (size num_ineq)
+    bool equibrilated;
 
     Eigen::VectorXd rhs1; // The right hand side in the first KKT equation.
     Eigen::VectorXd rhs2; // The right hand side in the second KKT equation.
@@ -231,7 +242,6 @@ private:
                     bool initialize);
 
     void allocate();
-    void initCones(const Eigen::VectorXi &soc_dims);
 
     void bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s);
     void computeResiduals();
@@ -261,6 +271,7 @@ private:
     void setEquilibration();
     void unsetEquilibration();
     void cacheIndices();
+    void printSummary();
 };
 
 } // namespace ecos_eigen

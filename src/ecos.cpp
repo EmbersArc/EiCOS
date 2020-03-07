@@ -154,10 +154,30 @@ void ECOSEigen::build(const Eigen::SparseMatrix<double> &G,
      */
     dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
 
-    initCones(soc_dims);
+    // initialize cones
+    so_cones.resize(soc_dims.size());
+    for (long i = 0; i < soc_dims.size(); i++)
+    {
+        SecondOrderCone &sc = so_cones[i];
+        sc.dim = soc_dims[i];
+        sc.eta = 0.;
+        sc.a = 0.;
+    }
 
     allocate();
 
+    printSummary();
+
+    setEquilibration();
+
+    Gt = this->G.transpose();
+    At = this->A.transpose();
+
+    setupKKT();
+}
+
+void ECOSEigen::printSummary()
+{
     print("- - - - - - - - - - - - - - -\n");
     print("|      Problem summary      |\n");
     print("- - - - - - - - - - - - - - -\n");
@@ -173,13 +193,6 @@ void ECOSEigen::build(const Eigen::SparseMatrix<double> &G,
         print("  Size of SOC #{}:      {}\n", i + 1, so_cones[i].dim);
     }
     print("- - - - - - - - - - - - - - -\n");
-
-    setEquilibration();
-
-    Gt = this->G.transpose();
-    At = this->A.transpose();
-
-    setupKKT();
 }
 
 void ECOSEigen::allocate()
@@ -222,18 +235,6 @@ void ECOSEigen::allocate()
     }
     KKT_V_ptr.reserve(KKT_ptr_size);
     KKT_AG_ptr.reserve(A.nonZeros() + G.nonZeros());
-}
-
-void ECOSEigen::initCones(const Eigen::VectorXi &soc_dims)
-{
-    so_cones.resize(soc_dims.size());
-    for (long i = 0; i < soc_dims.size(); i++)
-    {
-        SecondOrderCone &sc = so_cones[i];
-        sc.dim = soc_dims[i];
-        sc.eta = 0.;
-        sc.a = 0.;
-    }
 }
 
 const Eigen::VectorXd &ECOSEigen::solution() const
@@ -357,14 +358,17 @@ void ECOSEigen::setEquilibration()
 
     /* Equilibrate the h vector */
     h = h.cwiseQuotient(G_equil);
+
+    equibrilated = true;
 }
 
 void restore(const Eigen::VectorXd &d, const Eigen::VectorXd &e,
              Eigen::SparseMatrix<double> &m)
 {
-    for (long k = 0; k < m.outerSize(); ++k)
+    assert(not m.IsRowMajor);
+    for (long col = 0; col < m.cols(); ++col)
     {
-        for (Eigen::SparseMatrix<double>::InnerIterator it(m, k); it; ++it)
+        for (Eigen::SparseMatrix<double>::InnerIterator it(m, col); it; ++it)
         {
             it.valueRef() *= d(it.row()) * e(it.col());
         }
@@ -384,6 +388,8 @@ void ECOSEigen::unsetEquilibration()
 
     /* Unequilibrate the h vector */
     h = h.cwiseProduct(G_equil);
+
+    equibrilated = false;
 }
 
 /**
@@ -400,12 +406,14 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
     lp_cone.w = lp_cone.v.cwiseSqrt();
 
     /* Second-order cone */
-    size_t k = num_pc;
+    size_t cone_start = num_pc;
     for (SecondOrderCone &sc : so_cones)
     {
         /* check residuals and quit if they're negative */
-        const double sres = s(k) * s(k) - s.segment(k + 1, sc.dim - 1).squaredNorm();
-        const double zres = z(k) * z(k) - z.segment(k + 1, sc.dim - 1).squaredNorm();
+        const double sres = s(cone_start) * s(cone_start) -
+                            s.segment(cone_start + 1, sc.dim - 1).squaredNorm();
+        const double zres = z(cone_start) * z(cone_start) -
+                            z.segment(cone_start + 1, sc.dim - 1).squaredNorm();
         if (sres <= 0 or zres <= 0)
         {
             return false;
@@ -415,8 +423,8 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         const double snorm = std::sqrt(sres);
         const double znorm = std::sqrt(zres);
 
-        sc.skbar = s.segment(k, sc.dim) / snorm;
-        sc.zkbar = z.segment(k, sc.dim) / znorm;
+        sc.skbar = s.segment(cone_start, sc.dim) / snorm;
+        sc.zkbar = z.segment(cone_start, sc.dim) / znorm;
 
         sc.eta_square = snorm / znorm;
         sc.eta = std::sqrt(sc.eta_square);
@@ -451,7 +459,7 @@ bool ECOSEigen::updateScalings(const Eigen::VectorXd &s,
         sc.w = w;
 
         /* increase offset for next cone */
-        k += sc.dim;
+        cone_start += sc.dim;
     }
     /* lambda = W * z */
     scale(z, lambda);
@@ -1471,7 +1479,7 @@ size_t ECOSEigen::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
     Eigen::VectorXd dx_ref(dim_K);                         // Refinement vector
 
-    const size_t mtilde = num_ineq + 2 * so_cones.size(); // Size of expanded G block
+    const size_t mtilde = num_ineq + 2 * so_cones.size(); // Size of expanded cone block
 
     const Eigen::VectorXd &bx = rhs.head(num_var);
     const Eigen::VectorXd &by = rhs.segment(num_var, num_eq);
@@ -1768,44 +1776,43 @@ void ECOSEigen::setupKKT()
     }
 
     // A' (1,2)
-    for (long k = 0; k < At.outerSize(); k++)
+    for (long col = 0; col < At.cols(); col++)
     {
-        for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
+        for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
         {
-            K_triplets.emplace_back(it.row(), it.col() + A.cols(), it.value());
+            K_triplets.emplace_back(it.row(), A.cols() + col, it.value());
         }
     }
 
     // G' (1,3)
     {
-        // Linear block
+        size_t col_Gt = 0;
         size_t col_K = num_var + num_eq;
+
+        // Linear block
+        for (size_t col = 0; col < num_pc; col++)
         {
-            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
-            for (long k = 0; k < Gt_block.outerSize(); k++)
+            for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
-                {
-                    K_triplets.emplace_back(it.row(), col_K + it.col(), it.value());
-                }
+                K_triplets.emplace_back(it.row(), col_K, it.value());
             }
-            col_K += num_pc;
+            col_Gt++;
+            col_K++;
         }
 
         // SOC blocks
-        size_t col_Gt = num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
-            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
-            for (long k = 0; k < Gt_block.outerSize(); k++)
+            for (size_t col = 0; col < sc.dim; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
-                    K_triplets.emplace_back(it.row(), col_K + it.col(), it.value());
+                    K_triplets.emplace_back(it.row(), col_K, it.value());
                 }
+                col_Gt++;
+                col_K++;
             }
-            col_K += sc.dim + 2;
-            col_Gt += sc.dim;
+            col_K += 2;
         }
     }
 
@@ -1827,8 +1834,8 @@ void ECOSEigen::setupKKT()
          *    [ 1                * ]
          *    [   1           *  * ]
          *    [     .         *  * ]      
-         *    [       .       *  * ]       [ D   v  u  ]      D: Identity of size conesize       
-         *  - [         .     *  * ]  =  - [ u'  1  0  ]      v: Vector of size conesize - 1      
+         *    [       .       *  * ]       [ D   v   u ]      D: Identity of size conesize       
+         *  - [         .     *  * ]  =  - [ u'  1   0 ]      v: Vector of size conesize - 1      
          *    [           1   *  * ]       [ v'  0' -1 ]      u: Vector of size conesize    
          *    [             1 *  * ]
          *    [   * * * * * * 1    ]
@@ -1891,45 +1898,45 @@ void ECOSEigen::cacheIndices()
     // A AND G MATRICES
 
     // A' (1,2)
-    for (long k = 0; k < At.outerSize(); k++)
+    for (long col = 0; col < At.cols(); col++)
     {
-        for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
+        for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
         {
-            KKT_AG_ptr.push_back(&K.coeffRef(it.row(), it.col() + A.cols()));
+            KKT_AG_ptr.push_back(&K.coeffRef(it.row(), A.cols() + it.col()));
         }
     }
 
     // G' (1,3)
     {
         // Linear block
+        size_t col_Gt = 0;
         size_t col_K = num_var + num_eq;
+        for (size_t col = 0; col < num_pc; col++)
         {
-            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
-            for (long k = 0; k < Gt_block.outerSize(); k++)
+            for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
-                {
-                    KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K + it.col()));
-                }
+                KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K));
             }
-            col_K += num_pc;
+            col_Gt++;
+            col_K++;
         }
 
         // SOC blocks
-        size_t col_Gt = num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
-            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
-            for (long k = 0; k < Gt_block.outerSize(); k++)
+            for (size_t col = 0; col < sc.dim; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
-                    KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K + it.col()));
+                    KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K));
                 }
+                col_Gt++;
+                col_K++;
             }
-            col_K += sc.dim + 2;
-            col_Gt += sc.dim;
+            col_K += 2;
         }
+        assert(col_K == size_t(K.cols()));
+        assert(col_Gt == size_t(Gt.cols()));
     }
 
     // SCALING AND RESIDUALS -V (3,3)
@@ -1982,9 +1989,9 @@ void ECOSEigen::updateKKTAG()
 {
     size_t ptr_i = 0;
     // A' (1,2)
-    for (long k = 0; k < At.outerSize(); k++)
+    for (long col = 0; col < At.cols(); col++)
     {
-        for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
+        for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
         {
             *KKT_AG_ptr[ptr_i++] = it.value();
         }
@@ -1992,33 +1999,85 @@ void ECOSEigen::updateKKTAG()
 
     // G' (1,3)
     {
+        size_t col_Gt = 0;
         // Linear block
         {
-            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
-            for (long k = 0; k < Gt_block.outerSize(); k++)
+            for (size_t col = 0; col < num_pc; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
                     *KKT_AG_ptr[ptr_i++] = it.value();
                 }
+                col_Gt++;
             }
         }
 
         // SOC blocks
-        size_t col_Gt = num_pc;
         for (const SecondOrderCone &sc : so_cones)
         {
-            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
-            for (long k = 0; k < Gt_block.outerSize(); k++)
+            for (size_t col = 0; col < sc.dim; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
                     *KKT_AG_ptr[ptr_i++] = it.value();
                 }
+                col_Gt++;
             }
-            col_Gt += sc.dim;
         }
+        assert(col_Gt == size_t(Gt.cols()));
     }
+}
+
+void ECOSEigen::updateData(const Eigen::SparseMatrix<double> &G,
+                           const Eigen::SparseMatrix<double> &A,
+                           const Eigen::VectorXd &c,
+                           const Eigen::VectorXd &h,
+                           const Eigen::VectorXd &b)
+{
+    if (equibrilated)
+        unsetEquilibration();
+
+    this->G = G;
+    this->A = A;
+    this->c = c;
+    this->h = h;
+    this->b = b;
+
+    Gt = G.transpose();
+    At = A.transpose();
+
+    setEquilibration();
+
+    updateKKTAG();
+}
+
+void ECOSEigen::updateData(double *Gpr, int *Gjc, int *Gir,
+                           double *Apr, int *Ajc, int *Air,
+                           double *c, double *h, double *b)
+{
+    Eigen::SparseMatrix<double> G_;
+    Eigen::SparseMatrix<double> A_;
+    Eigen::VectorXd c_;
+    Eigen::VectorXd h_;
+    Eigen::VectorXd b_;
+    Eigen::VectorXi q_;
+
+    if (Gpr and Gjc and Gir)
+    {
+        G_ = Eigen::Map<Eigen::SparseMatrix<double>>(num_ineq, num_var, Gjc[num_var], Gjc, Gir, Gpr);
+        h_ = Eigen::Map<Eigen::VectorXd>(h, num_ineq);
+    }
+    if (Apr and Ajc and Air)
+    {
+        A_ = Eigen::Map<Eigen::SparseMatrix<double>>(num_eq, num_var, Ajc[num_var], Ajc, Air, Apr);
+        b_ = Eigen::Map<Eigen::VectorXd>(b, num_eq);
+    }
+    if (c)
+    {
+        c_ = Eigen::Map<Eigen::VectorXd>(c, num_var);
+    }
+
+    updateData(G_, A_, c_, h_, b_);
 }
 
 } // namespace ecos_eigen
