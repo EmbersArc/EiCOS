@@ -217,7 +217,7 @@ private:
     Eigen::VectorXd G_equil; // (size num_ineq)
     bool equibrilated;
 
-    Eigen::VectorXd rhs1; // The right hand side in the first KKT equation.
+    Eigen::VectorXd rhs1; // The right hand side in the first  KKT equation.
     Eigen::VectorXd rhs2; // The right hand side in the second KKT equation.
 
     // The problem data scaling parameters
@@ -232,7 +232,7 @@ private:
     std::vector<double *> KKT_V_ptr;  // Pointer to scaling/regularization elements for fast update
     std::vector<double *> KKT_AG_ptr; // Pointer to A/G elements for fast update
     void setupKKT();
-    void initKKT();
+    void resetKKTScalings();
     void updateKKTScalings();
     void updateKKTAG();
     size_t solveKKT(const Eigen::VectorXd &rhs,
