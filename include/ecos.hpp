@@ -218,11 +218,12 @@ private:
     Eigen::SparseMatrix<double> K;
     using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
     LDLT_t ldlt;
-    std::vector<double *> KKT_s_ptr;  // Pointer to scaling/regularization elements for fast update
-    std::vector<double *> KKT_ag_ptr; // Pointer to A/G elements for fast update
+    std::vector<double *> KKT_V_ptr;  // Pointer to scaling/regularization elements for fast update
+    std::vector<double *> KKT_AG_ptr; // Pointer to A/G elements for fast update
     void setupKKT();
     void initKKT();
-    bool updateKKT();
+    void updateKKTScalings();
+    void updateKKTAG();
     size_t solveKKT(const Eigen::VectorXd &rhs,
                     Eigen::VectorXd &dx,
                     Eigen::VectorXd &dy,

@@ -176,6 +176,9 @@ void ECOSEigen::build(const Eigen::SparseMatrix<double> &G,
 
     setEquilibration();
 
+    Gt = this->G.transpose();
+    At = this->A.transpose();
+
     setupKKT();
 }
 
@@ -217,7 +220,8 @@ void ECOSEigen::allocate()
     {
         KKT_ptr_size += 3 * sc.dim + 1;
     }
-    KKT_s_ptr.reserve(KKT_ptr_size);
+    KKT_V_ptr.reserve(KKT_ptr_size);
+    KKT_AG_ptr.reserve(A.nonZeros() + G.nonZeros());
 }
 
 void ECOSEigen::initCones(const Eigen::VectorXi &soc_dims)
@@ -788,7 +792,7 @@ void ECOSEigen::initKKT()
     /* LP cone */
     for (size_t k = 0; k < num_pc; k++)
     {
-        *KKT_s_ptr[ptr_i++] = -1.;
+        *KKT_V_ptr[ptr_i++] = -1.;
     }
 
     /* Second-order cone */
@@ -797,29 +801,29 @@ void ECOSEigen::initKKT()
         /* D */
         for (size_t k = 0; k < sc.dim; k++)
         {
-            *KKT_s_ptr[ptr_i++] = -1.;
+            *KKT_V_ptr[ptr_i++] = -1.;
         }
 
         /* -1 on diagonal */
-        *KKT_s_ptr[ptr_i++] = -1.;
+        *KKT_V_ptr[ptr_i++] = -1.;
 
         /* -v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_s_ptr[ptr_i++] = 0.;
+            *KKT_V_ptr[ptr_i++] = 0.;
         }
 
         /* 1 on diagonal */
-        *KKT_s_ptr[ptr_i++] = 1.;
+        *KKT_V_ptr[ptr_i++] = 1.;
 
         /* -u */
-        *KKT_s_ptr[ptr_i++] = 0.;
+        *KKT_V_ptr[ptr_i++] = 0.;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_s_ptr[ptr_i++] = 0.;
+            *KKT_V_ptr[ptr_i++] = 0.;
         }
     }
-    assert(ptr_i == KKT_s_ptr.size());
+    assert(ptr_i == KKT_V_ptr.size());
 }
 
 exitcode ECOSEigen::solve()
@@ -1144,10 +1148,14 @@ exitcode ECOSEigen::solve()
 
         updateScalings(w.s, w.z, w.lambda);
 
-        bool update_success = updateKKT();
+        updateKKTScalings();
 
-        if (not update_success)
+        ldlt.factorize(K);
+
+        if (ldlt.info() != Eigen::Success)
         {
+            if constexpr (debug_printing)
+                print("Failed to factorize matrix after update!\n");
             return exitcode::FATAL;
         }
 
@@ -1674,56 +1682,47 @@ void ECOSEigen::RHS_affine()
     }
 }
 
-bool ECOSEigen::updateKKT()
+void ECOSEigen::updateKKTScalings()
 {
     size_t ptr_i = 0;
 
     /* LP cone */
     for (size_t k = 0; k < num_pc; k++)
     {
-        *KKT_s_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
+        *KKT_V_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
     }
 
     /* Second-order cone */
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
-        *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.d1 - settings.deltastat;
+        *KKT_V_ptr[ptr_i++] = -sc.eta_square * sc.d1 - settings.deltastat;
 
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_s_ptr[ptr_i++] = -sc.eta_square - settings.deltastat;
+            *KKT_V_ptr[ptr_i++] = -sc.eta_square - settings.deltastat;
         }
 
         /* diagonal */
-        *KKT_s_ptr[ptr_i++] = -sc.eta_square;
+        *KKT_V_ptr[ptr_i++] = -sc.eta_square;
 
         /* v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.v1 * sc.q(k - 1);
+            *KKT_V_ptr[ptr_i++] = -sc.eta_square * sc.v1 * sc.q(k - 1);
         }
 
         /* diagonal */
-        *KKT_s_ptr[ptr_i++] = sc.eta_square + settings.deltastat;
+        *KKT_V_ptr[ptr_i++] = sc.eta_square + settings.deltastat;
 
         /* u */
-        *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.u0;
+        *KKT_V_ptr[ptr_i++] = -sc.eta_square * sc.u0;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            *KKT_s_ptr[ptr_i++] = -sc.eta_square * sc.u1 * sc.q(k - 1);
+            *KKT_V_ptr[ptr_i++] = -sc.eta_square * sc.u1 * sc.q(k - 1);
         }
     }
-    assert(ptr_i == KKT_s_ptr.size());
-
-    ldlt.factorize(K);
-    if (ldlt.info() != Eigen::Success)
-    {
-        if constexpr (debug_printing)
-            print("Failed to factorize matrix!\n");
-        return false;
-    }
-    return true;
+    assert(ptr_i == KKT_V_ptr.size());
 }
 
 void ECOSEigen::setupKKT()
@@ -1740,9 +1739,6 @@ void ECOSEigen::setupKKT()
      *  Only the upper triangular part is constructed here.
      */
     K.resize(dim_K, dim_K);
-
-    Gt = G.transpose();
-    At = A.transpose();
 
     // Number of non-zeros in KKT matrix
     size_t K_nonzeros = At.nonZeros() + Gt.nonZeros();
@@ -1887,17 +1883,62 @@ void ECOSEigen::setupKKT()
     cacheIndices();
 }
 
+/**
+ * Save pointers for fast access
+ */
 void ECOSEigen::cacheIndices()
 {
-    // Save pointers for fast access
+    // A AND G MATRICES
 
-    // SCALING AND RESIDUALS
+    // A' (1,2)
+    for (long k = 0; k < At.outerSize(); k++)
+    {
+        for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
+        {
+            KKT_AG_ptr.push_back(&K.coeffRef(it.row(), it.col() + A.cols()));
+        }
+    }
+
+    // G' (1,3)
+    {
+        // Linear block
+        size_t col_K = num_var + num_eq;
+        {
+            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
+            for (long k = 0; k < Gt_block.outerSize(); k++)
+            {
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                {
+                    KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K + it.col()));
+                }
+            }
+            col_K += num_pc;
+        }
+
+        // SOC blocks
+        size_t col_Gt = num_pc;
+        for (const SecondOrderCone &sc : so_cones)
+        {
+            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
+            for (long k = 0; k < Gt_block.outerSize(); k++)
+            {
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                {
+                    KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K + it.col()));
+                }
+            }
+            col_K += sc.dim + 2;
+            col_Gt += sc.dim;
+        }
+    }
+
+    // SCALING AND RESIDUALS -V (3,3)
 
     /* LP cone */
     size_t diag_idx = num_var + num_eq;
     for (size_t k = 0; k < num_pc; k++)
     {
-        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
         diag_idx++;
     }
 
@@ -1905,37 +1946,79 @@ void ECOSEigen::cacheIndices()
     for (const SecondOrderCone &sc : so_cones)
     {
         /* D */
-        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
         diag_idx++;
         for (size_t k = 1; k < sc.dim; k++)
         {
-            KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+            KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
             diag_idx++;
         }
 
         /* diagonal */
-        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
 
         /* v */
         for (size_t k = 1; k < sc.dim; k++)
         {
-            KKT_s_ptr.push_back(&K.coeffRef(diag_idx - sc.dim + k, diag_idx));
+            KKT_V_ptr.push_back(&K.coeffRef(diag_idx - sc.dim + k, diag_idx));
         }
         diag_idx++;
 
         /* diagonal */
-        KKT_s_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
+        KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
 
         /* u */
-        KKT_s_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1, diag_idx));
+        KKT_V_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1, diag_idx));
         for (size_t k = 1; k < sc.dim; k++)
         {
-            KKT_s_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx));
+            KKT_V_ptr.push_back(&K.coeffRef(diag_idx - sc.dim - 1 + k, diag_idx));
         }
         diag_idx++;
     }
-
     assert(diag_idx == dim_K);
+}
+
+void ECOSEigen::updateKKTAG()
+{
+    size_t ptr_i = 0;
+    // A' (1,2)
+    for (long k = 0; k < At.outerSize(); k++)
+    {
+        for (Eigen::SparseMatrix<double>::InnerIterator it(At, k); it; ++it)
+        {
+            *KKT_AG_ptr[ptr_i++] = it.value();
+        }
+    }
+
+    // G' (1,3)
+    {
+        // Linear block
+        {
+            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.leftCols(num_pc);
+            for (long k = 0; k < Gt_block.outerSize(); k++)
+            {
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                {
+                    *KKT_AG_ptr[ptr_i++] = it.value();
+                }
+            }
+        }
+
+        // SOC blocks
+        size_t col_Gt = num_pc;
+        for (const SecondOrderCone &sc : so_cones)
+        {
+            const Eigen::SparseMatrix<double, Eigen::ColMajor> Gt_block = Gt.middleCols(col_Gt, sc.dim);
+            for (long k = 0; k < Gt_block.outerSize(); k++)
+            {
+                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt_block, k); it; ++it)
+                {
+                    *KKT_AG_ptr[ptr_i++] = it.value();
+                }
+            }
+            col_Gt += sc.dim;
+        }
+    }
 }
 
 } // namespace ecos_eigen
