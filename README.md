@@ -1,4 +1,4 @@
-A C++ Second Order Cone Solver based on [ECOS](https://github.com/embotech/ecos).
+A C++ Second Order Cone Solver for problems of the form
 
 <!--
 \begin{aligned} 
@@ -66,3 +66,10 @@ solver.solve()
 * `fmt` for printing and formatting
 
 Work in progress. All tests pass at this point but features are still being implemented.
+
+### Credits
+This solver is entirely based on [ECOS](https://github.com/embotech/ecos).
+
+* Alexander Domahidi (ECOS principal developer)
+* Eric Chu (ECOS unit tests)
+* Stephen Boyd (methods and maths)
