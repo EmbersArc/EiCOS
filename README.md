@@ -4,12 +4,12 @@ A C++ Second Order Cone Solver for problems of the form
 
 <!--
 \begin{aligned} 
-\text{minimize} \ c^T x \\
-\text{subject to} \ Ax &= b \\
-Gx &\preceq_K h
+\text{minimize} \ \ &c^T x \\
+\text{subject to} \ \ &Ax = b \\
+&Gx \preceq_K h
 \end{aligend}
 -->
-![equation](https://latex.codecogs.com/gif.latex?%5Cbegin%7Baligned%7D%20%5Ctext%7Bminimize%7D%20%5C%20c%5ET%20x%20%5C%5C%20%5Ctext%7Bsubject%20to%7D%20%5C%20Ax%20%26%3D%20b%20%5C%5C%20Gx%20%26%5Cpreceq_K%20h%20%5Cend%7Baligend%7D)
+![equation](https://latex.codecogs.com/png.latex?%5Cbg_white%20%5Cbegin%7Baligned%7D%20%5Ctext%7Bminimize%7D%20%5C%20%5C%20%26c%5ET%20x%20%5C%5C%20%5Ctext%7Bsubject%20to%7D%20%5C%20%5C%20%26Ax%20%3D%20b%20%5C%5C%20%26Gx%20%5Cpreceq_K%20h%20%5Cend%7Baligend%7D)
 
 The last constraint is generalized and includes both the positive orthant and second order cones, so that the top `p` rows of G represent the positive constraints and the remaining rows contain stacked representations of the second order cones:
 <!--
