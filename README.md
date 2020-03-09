@@ -1,3 +1,5 @@
+# Eigen Conic Solver
+
 A C++ Second Order Cone Solver for problems of the form
 
 <!--
