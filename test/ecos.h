@@ -2,24 +2,31 @@
 
 // Ugly hack to make tests work with minimal effort
 
-#include "ecos.hpp"
+#include "eicos.hpp"
 
 using idxint = int;
 using pfloat = double;
-using pwork = ecos_eigen::ECOSEigen;
+using pwork = EiCOS::Solver;
 
-ecos_eigen::ECOSEigen *ECOS_setup(idxint n, idxint m, idxint p, idxint l, idxint ncones, idxint *q, idxint /*nexc*/,
-                                  pfloat *Gpr, idxint *Gjc, idxint *Gir,
-                                  pfloat *Apr, idxint *Ajc, idxint *Air,
-                                  pfloat *c, pfloat *h, pfloat *b)
+pwork *ECOS_setup(idxint n, idxint m, idxint p, idxint l, idxint ncones, idxint *q, idxint /*nexc*/,
+                  pfloat *Gpr, idxint *Gjc, idxint *Gir,
+                  pfloat *Apr, idxint *Ajc, idxint *Air,
+                  pfloat *c, pfloat *h, pfloat *b)
 {
-    pwork *w = new ecos_eigen::ECOSEigen(n, m, p, l, ncones, q, Gpr, Gjc, Gir, Apr, Ajc, Air, c, h, b);
+    pwork *w = new EiCOS::Solver(n, m, p, l, ncones, q, Gpr, Gjc, Gir, Apr, Ajc, Air, c, h, b);
     return w;
 }
 
 idxint ECOS_solve(pwork *work)
 {
     return idxint(work->solve());
+}
+
+void ECOS_updateData(pwork *work,
+                     pfloat *Gpr, pfloat *Apr,
+                     pfloat *c, pfloat *h, pfloat *b)
+{
+    work->updateData(Gpr, Apr, c, h, b);
 }
 
 void ECOS_cleanup(pwork *work, idxint /*whatever*/)

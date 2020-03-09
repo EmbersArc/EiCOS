@@ -1,5 +1,5 @@
-#include "ecos.hpp"
-#include "data.hpp"
+#include "eicos.hpp"
+#include "data_MPC01.hpp"
 #include "timing.hpp"
 
 #include <fmt/format.h>
@@ -32,8 +32,8 @@ int main()
         c_ = Eigen::Map<Eigen::VectorXd>(c, n);
     }
 
-    ecos_eigen::ECOSEigen solver(G_, A_, c_, h_, b_, q_);
-    ecos_eigen::exitcode exitcode;
+    EiCOS::Solver solver(G_, A_, c_, h_, b_, q_);
+    EiCOS::exitcode exitcode;
 
     fmt::print("Time for setup:    {:.3}ms\n", toc(t0));
 
@@ -41,7 +41,7 @@ int main()
     exitcode = solver.solve();
     fmt::print("Time for solve:    {:.3}ms\n", toc(t0));
 
-    // test data update
+    // // test data update
     t0 = tic();
     solver.updateData(G_, A_, c_, h_, b_);
     fmt::print("Time for update:    {:.3}ms\n", toc(t0));
@@ -50,5 +50,5 @@ int main()
     exitcode = solver.solve();
     fmt::print("Time for solve:    {:.3}ms\n", toc(t0));
 
-    assert("Solution not optimal!" && exitcode == ecos_eigen::exitcode::OPTIMAL);
+    assert("Solution not optimal!" && exitcode == EiCOS::exitcode::optimal);
 }
