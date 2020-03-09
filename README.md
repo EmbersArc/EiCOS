@@ -65,9 +65,7 @@ solver.solve()
 
 ### Dependencies
 * `Eigen` for linear algebra functionality
-* `fmt` for printing and formatting
-
-Work in progress. All tests pass at this point but features are still being implemented.
+* `fmt` (optional) for printing and formatting
 
 ### Credits
 This solver is entirely based on [ECOS](https://github.com/embotech/ecos).

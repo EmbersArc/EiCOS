@@ -2,8 +2,7 @@
 #include "data_MPC01.hpp"
 #include "timing.hpp"
 
-#include <fmt/format.h>
-#include <fmt/ostream.h>
+#include "printing.hpp"
 
 int main()
 {
@@ -35,20 +34,20 @@ int main()
     EiCOS::Solver solver(G_, A_, c_, h_, b_, q_);
     EiCOS::exitcode exitcode;
 
-    fmt::print("Time for setup:    {:.3}ms\n", toc(t0));
+    print("Time for setup:    {:.3}ms\n", toc(t0));
 
     t0 = tic();
     exitcode = solver.solve();
-    fmt::print("Time for solve:    {:.3}ms\n", toc(t0));
+    print("Time for solve:    {:.3}ms\n", toc(t0));
 
     // // test data update
     t0 = tic();
     solver.updateData(G_, A_, c_, h_, b_);
-    fmt::print("Time for update:    {:.3}ms\n", toc(t0));
+    print("Time for update:    {:.3}ms\n", toc(t0));
 
     t0 = tic();
     exitcode = solver.solve();
-    fmt::print("Time for solve:    {:.3}ms\n", toc(t0));
+    print("Time for solve:    {:.3}ms\n", toc(t0));
 
     assert("Solution not optimal!" && exitcode == EiCOS::exitcode::optimal);
 }
