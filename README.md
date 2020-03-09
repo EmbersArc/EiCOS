@@ -20,7 +20,7 @@ To construct a solver instance, call `EiCOS::Solver solver(G, A, c, h, b, q)` wh
 
 After successfully calling `solver.solve()`, the solution can be accessed by calling `solver.solution()`.
 
-To update the problem parameters, call `solver.updateData(G, A, c, h, b)`. Using this method instead of constructing a new problem can save a lot of time, especially for larger problems. However, zhe sparsity pattern and dimensions must be the same as they were when the problem was first constructed.
+To update the problem parameters, call `solver.updateData(G, A, c, h, b)`. Using this method instead of constructing a new problem can save a lot of time, especially for larger problems. The only restriction is that the sparsity pattern and dimensions must be the same as in the original problem.
 
 ### Dependencies
 * `Eigen` for linear algebra functionality
