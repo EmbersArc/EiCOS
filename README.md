@@ -15,6 +15,13 @@ Q_n = \{ \begin{bmatrix}t\\x\end{bmatrix} \mid  t \geq \lVert x \rVert_2 \}
 -->
 ![equation](https://latex.codecogs.com/gif.latex?Q_n%20%3D%20%5C%7B%20%5Cbegin%7Bbmatrix%7Dt%5C%5Cx%5Cend%7Bbmatrix%7D%20%5Cmid%20t%20%5Cgeq%20%5ClVert%20x%20%5CrVert_2%20%5C%7D)
 
+### Usage
+To construct a solver instance, call `EiCOS::Solver solver(G, A, c, h, b, q)` where `A` and `B` are of type `Eigen::SparseMatrix<double>`, `c`, `h` and `b` of type `Eigen::VectorXd` and the vector of second order cone dimensions `q` of type `Eigen::VectorXi`.
+
+After successfully calling `solver.solve()`, the solution can be accessed by calling `solver.solution()`.
+
+To update the problem parameters, call `solver.updateData(G, A, c, h, b)`. Using this method instead of constructing a new problem can save a lot of time, especially for larger problems. However, zhe sparsity pattern and dimensions must be the same as they were when the problem was first constructed.
+
 ### Dependencies
 * `Eigen` for linear algebra functionality
 * `fmt` for printing and formatting
