@@ -16,11 +16,33 @@ Q_n = \{ \begin{bmatrix}t\\x\end{bmatrix} \mid  t \geq \lVert x \rVert_2 \}
 ![equation](https://latex.codecogs.com/gif.latex?Q_n%20%3D%20%5C%7B%20%5Cbegin%7Bbmatrix%7Dt%5C%5Cx%5Cend%7Bbmatrix%7D%20%5Cmid%20t%20%5Cgeq%20%5ClVert%20x%20%5CrVert_2%20%5C%7D)
 
 ### Usage
-To construct a solver instance, call `EiCOS::Solver solver(G, A, c, h, b, q)` where `A` and `B` are of type `Eigen::SparseMatrix<double>`, `c`, `h` and `b` of type `Eigen::VectorXd` and the vector of second order cone dimensions `q` of type `Eigen::VectorXi`.
+```cpp
+Eigen::SparseMatrix<double> A, B;
+Eigen::VectorXd c, h, b;
+Eigen::VectorXi q;
 
-After successfully calling `solver.solve()`, the solution can be accessed by calling `solver.solution()`.
+// (Set up problem data)
 
-To update the problem parameters, call `solver.updateData(G, A, c, h, b)`. Using this method instead of constructing a new problem can save a lot of time, especially for larger problems. The only restriction is that the sparsity pattern and dimensions must be the same as in the original problem.
+// Construct a solver instance
+EiCOS::Solver solver(G, A, c, h, b, q);
+
+// Solve the problem
+solver.solve()
+
+// Save the solution
+Eigen::VectorXd s = solver.solution();
+
+// (Change entries in G, A, c, h, b)
+
+// Update problem data: Using this method instead of constructing a new problem can
+// save a lot of time, especially for larger problems. The only restriction is that 
+// the sparsity pattern and dimensions must be the same as in the original problem.
+solver.updateData(G, A, c, h, b);
+
+// Rinse and repeat
+solver.solve()
+
+```
 
 ### Dependencies
 * `Eigen` for linear algebra functionality
