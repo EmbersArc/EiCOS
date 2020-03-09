@@ -27,6 +27,7 @@
 /* Include Tests */
 #include "MPC/MPC01.h"
 #include "MPC/MPC02.h"
+#include "updateData/update_data.h"
 #include "cvxpyProblems/githubIssue98.h"
 #include "feasibilityProblems/feas.h"
 #include "unboundedProblems/unboundedLP1.h"
@@ -52,6 +53,7 @@ static char *all_tests()
 {
     mu_run_test(test_MPC01);
     mu_run_test(test_MPC02);
+    mu_run_test(test_update_data);
     mu_run_test(test_unboundedLP1);
     mu_run_test(test_unboundedMaxSqrt);
     mu_run_test(test_feas);
