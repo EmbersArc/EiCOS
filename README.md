@@ -11,26 +11,49 @@ A C++ Second Order Cone Solver for problems of the form
 -->
 ![equation](https://latex.codecogs.com/png.latex?%5Cbg_white%20%5Cbegin%7Baligned%7D%20%5Ctext%7Bminimize%7D%20%5C%20%5C%20%26c%5ET%20x%20%5C%5C%20%5Ctext%7Bsubject%20to%7D%20%5C%20%5C%20%26Ax%20%3D%20b%20%5C%5C%20%26Gx%20%5Cpreceq_K%20h%20%5Cend%7Baligend%7D)
 
-The last constraint is generalized and includes both the positive orthant and second order cones, so that the top `p` rows of G represent the positive constraints and the remaining rows contain stacked representations of the second order cones:
-<!--
-Q_n = \{ \begin{bmatrix}t\\x\end{bmatrix} \mid  t \geq \lVert x \rVert_2 \} 
+<!-- 
+\begin{align*} 
+n_{var} & \dots\text{Number of variables} \\
+n_{eq} & \dots\text{Number of equality constraints} \\
+n_{ineq} & \dots\text{Number of inequality constraints} \\
+n_{pc} & \dots\text{Number of positive constraints (dimension of positive orthant)} \\
+n_{cones} & \dots\text{Number of second order cones in K} \\
+q & \dots\text{Vector containing dimension of each cone constraint in K} \\
+A & \dots\text{Equality constraint matrix} \in \mathbb{R}^{n_{eq} \times n_{var}} \\
+G & \dots\text{Inequality constraint matrix} \in \mathbb{R}^{n_{ineq} \times n_{var}} \\
+c & \dots\text{Variable weight vector} \in \mathbb{R}^{n_{var}} \\
+h & \dots\text{Inequality constraint vector} \in \mathbb{R}^{n_{ineq}} \\
+b & \dots\text{Equality constraint vector} \in \mathbb{R}^{n_{eq}} \\
+\end{align*}
 -->
-![equation](https://latex.codecogs.com/gif.latex?Q_n%20%3D%20%5C%7B%20%5Cbegin%7Bbmatrix%7Dt%5C%5Cx%5Cend%7Bbmatrix%7D%20%5Cmid%20t%20%5Cgeq%20%5ClVert%20x%20%5CrVert_2%20%5C%7D)
+![symbols](https://latex.codecogs.com/png.latex?%5Cbg_white%20%5Cbegin%7Balign*%7D%20n_%7Bvar%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20variables%7D%20%5C%5C%20n_%7Beq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20equality%20constraints%7D%20%5C%5C%20n_%7Bineq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20inequality%20constraints%7D%20%5C%5C%20n_%7Bpc%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20positive%20constraints%20%28dimension%20of%20positive%20orthant%29%7D%20%5C%5C%20n_%7Bcones%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20second%20order%20cones%20in%20K%7D%20%5C%5C%20n_%7Bq%7D%20%26%20%5Cdots%5Ctext%7BVector%20containing%20dimension%20of%20each%20cone%20constraint%20in%20K%7D%20%5C%5C%20A%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20G%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20c%20%26%20%5Cdots%5Ctext%7BVariable%20weight%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20h%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%7D%20%5C%5C%20b%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20%5Cend%7Balign*%7D)
 
+The last constraint is generalized and includes both the positive orthant and second order cones, so that the top rows of G each represent a positive constraint
+<!--
+\begin{gathered}
+P x\leq g \\
+\Leftrightarrow \\
+P \preceq g
+\end{gathered}
+-->
+![equation](https://latex.codecogs.com/png.latex?%5Cbg_white%20%5Cbegin%7Bgathered%7D%20P%20x%5Cleq%20g%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20P%20%5Cpreceq%20g%20%5Cend%7Bgathered%7D)
 
-Name | Explanation
---- | ---
-n | Number of problem variables
-m | Number of inequality constraints.
-p | Number of equality constraints.
-l |       The dimension of the positive orthant.
-ncones |  Number of second order cones in K.
-q |       Vector of dimesions of each cone constraint in K.
-A(p,n) |  Equality constraint matrix.
-b(p) |    Equality constraint vector.
-G(m,n) |  Generalized inequality matrix.
-h(m) |    Generalized inequality vector.
-c(n) |    Variable weights.
+and the remaining rows contain stacked representations of the second order cones:
+<!--
+\begin{gathered}
+\lVert F_ix + g_i \rVert \leq v_i^T x + w_i \\
+\Leftrightarrow \\
+\begin{bmatrix} v_i^T \\ -F_i \end{bmatrix} \preceq \begin{bmatrix} w_i \\ g_i \end{bmatrix} \\
+i = 1,...,n_{cones}
+\\
+\text{with} \\
+v_i \in \mathbb{R}^{n_{var}} \\
+F_i \in \mathbb{R}^{q_i-1 \times n_{var}} \\
+w_i \in \mathbb{R} \\
+g_i \in \mathbb{R}^{q_i-1} \\
+\end{gathered}
+-->
+![equation](https://latex.codecogs.com/png.latex?%5Cbg_white%20%5Cbegin%7Bgathered%7D%20%5ClVert%20F_ix%20&plus;%20g_i%20%5CrVert%20%5Cleq%20v_i%5ET%20x%20&plus;%20w_i%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20%5Cbegin%7Bbmatrix%7D%20v_i%5ET%20%5C%5C%20-F_i%20%5Cend%7Bbmatrix%7D%20%5Cpreceq%20%5Cbegin%7Bbmatrix%7D%20w_i%20%5C%5C%20g_i%20%5Cend%7Bbmatrix%7D%20%5C%5C%20i%20%3D%201%2C...%2Cn_%7Bcones%7D%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20v_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20F_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20w_i%20%5Cin%20%5Cmathbb%7BR%7D%20%5C%5C%20g_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
 
 ### Usage
 ```cpp
