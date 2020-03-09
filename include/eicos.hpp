@@ -123,10 +123,8 @@ class Solver
      *      \      ########  ##  ########  ########  ########
      *       \     ########  ##  ########  ########  ########
      *        \    ##            ##        ##    ##  ##      
-     *         \  /##            ##        ##    ##  ##      
      *          \/ ########  ##  ##        ##    ##  ########
      *          /\ ########  ##  ##        ##    ##  ########
-     *         /  \##        ##  ##        ##    ##        ##
      *        /    ##        ##  ##        ##    ##        ##
      *       /     ########  ##  ########  ########  ########
      *      /      ########  ##  ########  ########  ######## 
@@ -134,32 +132,6 @@ class Solver
      *    /            \
      *    `'---....---'´
      * 
-     * Solves
-     * 
-     * min  c' * x
-     * s.t. A * x = b
-     *      G * x <=_K h
-     * 
-     * where the last inequality is generalized, i.e. h - G * x belongs to the cone K. 
-     * This solver supports the positive orthant R_+, described by the first l rows of G.
-     * 
-     * and second-order cones Q_n defined as
-     * 
-     * Q_n = { (t,x) | t >= || x ||_2 } 
-     * 
-     * n:       Number of variables.
-     * m:       Number of inequality constraints.
-     * p:       Number of equality constraints.
-     * l:       The dimension of the positive orthant, i.e. in Gx+s=h, s in K.
-     * The first l elements of s are >=0, ncones is the number of second-order cones present in K.
-     * ncones:  Number of second order cones in K.
-     * q:       Vector of dimesions of each cone constraint in K.
-     * 
-     * A(p,n):  Equality constraint matrix.
-     * b(p):    Equality constraint vector.
-     * G(m,n):  Generalized inequality matrix.
-     * h(m):    Generalized inequality vector.
-     * c(n):    Variable weights.
      */
 
 public:
@@ -227,7 +199,7 @@ private:
     double nx, ny, nz, ns;
 
     // Equilibration vectors
-    Eigen::VectorXd x_equil; // (size n)
+    Eigen::VectorXd x_equil; // (size num_var)
     Eigen::VectorXd A_equil; // (size num_eq)
     Eigen::VectorXd G_equil; // (size num_ineq)
     bool equibrilated;
