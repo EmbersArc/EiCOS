@@ -17,6 +17,8 @@ Q_n = \{ \begin{bmatrix}t\\x\end{bmatrix} \mid  t \geq \lVert x \rVert_2 \}
 
 ### Usage
 ```cpp
+#include "eicos.hpp"
+
 Eigen::SparseMatrix<double> A, B;
 Eigen::VectorXd c, h, b;
 Eigen::VectorXi q;
