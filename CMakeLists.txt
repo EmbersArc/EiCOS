@@ -33,8 +33,8 @@ ELSE (${fmt_FOUND})
    MESSAGE(STATUS "Could not locate fmt. Printing has been disabled.")
 ENDIF (${fmt_FOUND})
 
-add_executable(run src/run.cpp)
-target_link_libraries(run eicos)
+add_executable(eicos_test_problem src/run.cpp)
+target_link_libraries(eicos_test_problem eicos)
 
-add_executable(test test/ecostester.cpp)
-target_link_libraries(test eicos)
+add_executable(eicos_run_tests test/ecostester.cpp)
+target_link_libraries(eicos_run_tests eicos)
