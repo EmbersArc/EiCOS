@@ -546,7 +546,7 @@ exitcode Solver::checkExitConditions(bool reduced_accuracy)
             }
             else
             {
-                print("optimal (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
+                print("Optimal (within feastol={:3.1e}, reltol={:3.1e}, abstol={:3.1e}).\n",
                       std::max(w.i.dres, w.i.pres), w.i.relgap.value_or(0.), w.i.gap);
             }
         }
@@ -573,11 +573,11 @@ exitcode Solver::checkExitConditions(bool reduced_accuracy)
         {
             if (reduced_accuracy)
             {
-                print("Close to UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
+                print("Close to unbounded (within feastol={:3.1e}).\n", w.i.dinfres.value());
             }
             else
             {
-                print("UNBOUNDED (within feastol={:3.1e}).\n", w.i.dinfres.value());
+                print("Unbounded (within feastol={:3.1e}).\n", w.i.dinfres.value());
             }
         }
 
@@ -600,11 +600,11 @@ exitcode Solver::checkExitConditions(bool reduced_accuracy)
     {
         if (reduced_accuracy)
         {
-            print("Close to PRIMAL INFEASIBLE (within feastol={:3.1e}).\n", w.i.pinfres.value());
+            print("Close to primal infeasible (within feastol={:3.1e}).\n", w.i.pinfres.value());
         }
         else
         {
-            print("PRIMAL INFEASIBLE (within feastol={:3.1e}).\n", w.i.pinfres.value());
+            print("Primal infeasible (within feastol={:3.1e}).\n", w.i.pinfres.value());
         }
 
         w.i.pinf = true;
@@ -2019,8 +2019,10 @@ void Solver::updateData(const Eigen::SparseMatrix<double> &G,
     if (equibrilated)
         unsetEquilibration();
 
-    this->G = G;
-    this->A = A;
+    for (int i = 0; i < G.nonZeros(); i++)
+        this->G.valuePtr()[i] = G.valuePtr()[i];
+    for (int i = 0; i < A.nonZeros(); i++)
+        this->A.valuePtr()[i] = A.valuePtr()[i];
     this->c = c;
     this->h = h;
     this->b = b;
