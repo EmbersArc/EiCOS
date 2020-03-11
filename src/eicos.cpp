@@ -832,8 +832,9 @@ void Solver::resetKKTScalings()
     assert(ptr_i == KKT_V_ptr.size());
 }
 
-exitcode Solver::solve()
+exitcode Solver::solve(bool verbose)
 {
+    settings.verbose = verbose;
     exitcode code = exitcode::fatal;
 
     resetKKTScalings();

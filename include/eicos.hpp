@@ -34,7 +34,7 @@ struct Settings
     const double reltol_inacc = 5e-5;  // relative relaxed tolerance on duality gap
     const size_t nitref = 9;           // maximum number of iterative refinement steps
     const size_t maxit = 100;          // maximum number of iterations
-    const bool verbose = true;         // print solver output
+    bool verbose = false;              // print solver output
     const double linsysacc = 1e-14;    // rel. accuracy of search direction
     const double irerrfact = 6;        // factor by which IR should reduce err
     const double stepmin = 1e-6;       // smallest step that we do take
@@ -155,7 +155,7 @@ public:
     void updateData(double *Gpr, double *Apr,
                     double *c, double *h, double *b);
 
-    exitcode solve();
+    exitcode solve(bool verbose = false);
 
     const Eigen::VectorXd &solution() const;
 
