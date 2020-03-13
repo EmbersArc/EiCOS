@@ -13,8 +13,7 @@ pwork *ECOS_setup(idxint n, idxint m, idxint p, idxint l, idxint ncones, idxint 
                   pfloat *Apr, idxint *Ajc, idxint *Air,
                   pfloat *c, pfloat *h, pfloat *b)
 {
-    pwork *w = new EiCOS::Solver(n, m, p, l, ncones, q, Gpr, Gjc, Gir, Apr, Ajc, Air, c, h, b);
-    return w;
+    return new EiCOS::Solver(n, m, p, l, ncones, q, Gpr, Gjc, Gir, Apr, Ajc, Air, c, h, b);
 }
 
 idxint ECOS_solve(pwork *work)
