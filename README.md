@@ -19,8 +19,7 @@ A & \dots\text{Equality constraint matrix} \in \mathbb{R}^{n_{eq} \times n_{var}
 c & \dots\text{Variable weight vector} \in \mathbb{R}^{n_{var}} \\
 h & \dots\text{Inequality constraint vector} \in \mathbb{R}^{n_{ineq}} \\
 b & \dots\text{Equality constraint vector} \in \mathbb{R}^{n_{eq}} \\
-q & \dots\text{Vector containing dimension of each cone constraint} \in \mathbb{N}^{n_{cones}} \\
-\\
+q & \dots\text{Vector containing dimension of each cone constraint} \in \mathbb{N}^{n_{cones}} \\\\
 n_{var} & \dots\text{Number of variables} \\
 n_{eq} & \dots\text{Number of equality constraints} \\
 n_{ineq} & \dots\text{Number of inequality constraints} \\
@@ -28,18 +27,22 @@ n_{pc} & \dots\text{Number of positive constraints (dimension of positive orthan
 n_{cones} & \dots\text{Number of second order cones in K} \\
 \end{align*}
 -->
-![symbols](https://latex.codecogs.com/png.latex?%5Cbg_white%20%5Cbegin%7Balign*%7D%20G%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20A%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20c%20%26%20%5Cdots%5Ctext%7BVariable%20weight%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20h%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%7D%20%5C%5C%20b%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20q%20%26%20%5Cdots%5Ctext%7BVector%20containing%20dimension%20of%20each%20cone%20constraint%20in%20K%7D%20%5C%5C%20%5C%5C%20n_%7Bvar%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20variables%7D%20%5C%5C%20n_%7Beq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20equality%20constraints%7D%20%5C%5C%20n_%7Bineq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20inequality%20constraints%7D%20%5C%5C%20n_%7Bpc%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20positive%20constraints%20%28dimension%20of%20positive%20orthant%29%7D%20%5C%5C%20n_%7Bcones%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20second%20order%20cones%20in%20K%7D%20%5C%5C%20%5Cend%7Balign*%7D)
+![symbols](https://latex.codecogs.com/gif.latex?%5Cbegin%7Balign*%7D%20x%20%26%20%5Cdots%5Ctext%7BVariable%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20G%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20A%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20c%20%26%20%5Cdots%5Ctext%7BVariable%20weight%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20h%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%7D%20%5C%5C%20b%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20q%20%26%20%5Cdots%5Ctext%7BVector%20containing%20dimension%20of%20each%20cone%20constraint%7D%20%5Cin%20%5Cmathbb%7BN%7D%5E%7Bn_%7Bcones%7D%7D%20%5C%5C%5C%5C%20n_%7Bvar%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20variables%7D%20%5C%5C%20n_%7Beq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20equality%20constraints%7D%20%5C%5C%20n_%7Bineq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20inequality%20constraints%7D%20%5C%5C%20n_%7Bpc%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20positive%20constraints%20%28dimension%20of%20positive%20orthant%29%7D%20%5C%5C%20n_%7Bcones%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20second%20order%20cones%20in%20K%7D%20%5C%5C%20%5Cend%7Balign*%7D)
 
-The last constraint is generalized and includes both the positive orthant and second order cones, so that the top rows of `G` represent the linear constraints <!--
+The last constraint is generalized and includes both the positive orthant and second order cones, so that the top rows of `G` represent the linear constraints
+<!--
 \begin{gathered}
 Cx \leq d \\
 \Leftrightarrow \\
 C \preceq d \\
 \text{with} \\
 C \in \mathbb{R}^{n_{eq} \times n_{var}} \\
-d \in \mathbb{R}^{n_{eq}}
+d \in \mathbb{R}^{n_{eq}} \\
 \end{gathered}
--->and the remaining rows contain stacked representations of the second order cones:
+-->
+![equation](https://latex.codecogs.com/gif.latex?%5Cbegin%7Bgathered%7D%20Cx%20%5Cleq%20d%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20C%20%5Cpreceq%20d%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20C%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20d%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
+
+and the remaining rows contain stacked representations of the second order cones:
 <!--
 \begin{gathered}
 \lVert F_ix + g_i \rVert \leq v_i^T x + w_i \\
