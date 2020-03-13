@@ -72,13 +72,13 @@ struct Information
     bool isBetterThan(Information &other) const;
 };
 
-struct PositiveCone
+struct LPCone
 {
-    Eigen::VectorXd w; // size num_pc
-    Eigen::VectorXd v; // size num_pc
+    Eigen::VectorXd w; // size n_lc
+    Eigen::VectorXd v; // size n_lc
 };
 
-struct SecondOrderCone
+struct SOCone
 {
     size_t dim;            // dimension of cone
     Eigen::VectorXd skbar; // temporary variables to work with
@@ -96,12 +96,12 @@ struct SecondOrderCone
 
 struct Work
 {
-    void allocate(size_t num_var, size_t num_eq, size_t num_ineq);
-    Eigen::VectorXd x;      // Primal variables  size num_var
-    Eigen::VectorXd y;      // Multipliers for equality constaints  (size num_eq)
-    Eigen::VectorXd z;      // Multipliers for conic inequalities   (size num_ineq)
-    Eigen::VectorXd s;      // Slacks for conic inequalities        (size num_ineq)
-    Eigen::VectorXd lambda; // Scaled variable                      (size num_ineq)
+    void allocate(size_t n_var, size_t n_eq, size_t n_ineq);
+    Eigen::VectorXd x;      // Primal variables  size n_var
+    Eigen::VectorXd y;      // Multipliers for equality constaints  (size n_eq)
+    Eigen::VectorXd z;      // Multipliers for conic inequalities   (size n_ineq)
+    Eigen::VectorXd s;      // Slacks for conic inequalities        (size n_ineq)
+    Eigen::VectorXd lambda; // Scaled variable                      (size n_ineq)
 
     // Homogeneous embedding
     double kap; // kappa
@@ -170,15 +170,15 @@ private:
     Settings settings;
     Work w, w_best;
 
-    size_t num_var;  // Number of variables (n)
-    size_t num_eq;   // Number of equality constraints (p)
-    size_t num_ineq; // Number of inequality constraints (m)
-    size_t num_pc;   // Number of positive constraints (l)
-    size_t num_sc;   // Number of second order cone constraints (ncones)
-    size_t dim_K;    // Dimension of KKT matrix
+    size_t n_var;  // Number of variables (n)
+    size_t n_eq;   // Number of equality constraints (p)
+    size_t n_ineq; // Number of inequality constraints (m)
+    size_t n_lc;   // Number of linear constraints (l)
+    size_t n_sc;   // Number of second order cone constraints (ncones)
+    size_t dim_K;  // Dimension of KKT matrix
 
-    PositiveCone lp_cone;
-    std::vector<SecondOrderCone> so_cones;
+    LPCone lp_cone;
+    std::vector<SOCone> so_cones;
 
     Eigen::SparseMatrix<double> G;
     Eigen::SparseMatrix<double> A;
@@ -189,9 +189,9 @@ private:
     Eigen::VectorXd b;
 
     // Residuals
-    Eigen::VectorXd rx; // (size num_var)
-    Eigen::VectorXd ry; // (size num_eq)
-    Eigen::VectorXd rz; // (size num_ineq)
+    Eigen::VectorXd rx; // (size n_var)
+    Eigen::VectorXd ry; // (size n_eq)
+    Eigen::VectorXd rz; // (size n_ineq)
     double hresx, hresy, hresz;
     double rt;
 
@@ -199,9 +199,9 @@ private:
     double nx, ny, nz, ns;
 
     // Equilibration vectors
-    Eigen::VectorXd x_equil; // (size num_var)
-    Eigen::VectorXd A_equil; // (size num_eq)
-    Eigen::VectorXd G_equil; // (size num_ineq)
+    Eigen::VectorXd x_equil; // (size n_var)
+    Eigen::VectorXd A_equil; // (size n_eq)
+    Eigen::VectorXd G_equil; // (size n_ineq)
     bool equibrilated;
 
     // The problem data scaling parameters

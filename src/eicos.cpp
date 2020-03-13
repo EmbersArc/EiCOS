@@ -6,13 +6,13 @@
 namespace EiCOS
 {
 
-void Work::allocate(size_t num_var, size_t num_eq, size_t num_ineq)
+void Work::allocate(size_t n_var, size_t n_eq, size_t n_ineq)
 {
-    x.resize(num_var);
-    y.resize(num_eq);
-    s.resize(num_ineq);
-    z.resize(num_ineq);
-    lambda.resize(num_ineq);
+    x.resize(n_var);
+    y.resize(n_eq);
+    s.resize(n_ineq);
+    z.resize(n_ineq);
+    lambda.resize(n_ineq);
 }
 
 /**
@@ -68,7 +68,7 @@ bool Information::isBetterThan(Information &other) const
 
 void printSparseMatrix(const Eigen::SparseMatrix<double> &m)
 {
-    for (int j = 0; j < m.cols(); j++)
+    for (int j = 0; j < m.outerSize(); j++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
         {
@@ -136,11 +136,11 @@ void Solver::build(const Eigen::SparseMatrix<double> &G,
     {
         assert(A.cols() == G.cols());
     }
-    num_var = std::max(A.cols(), G.cols());
-    num_eq = A.rows();
-    num_ineq = G.rows();
-    num_pc = num_ineq - soc_dims.sum();
-    num_sc = soc_dims.size();
+    n_var = std::max(A.cols(), G.cols());
+    n_eq = A.rows();
+    n_ineq = G.rows();
+    n_lc = n_ineq - soc_dims.sum();
+    n_sc = soc_dims.size();
 
     /**
      *  Dimension of KKT matrix
@@ -149,13 +149,13 @@ void Solver::build(const Eigen::SparseMatrix<double> &G,
      *     + # inequality constraints
      *     + 2 * # second order cones (expansion of SOC scalings)
      */
-    dim_K = num_var + num_eq + num_ineq + 2 * num_sc;
+    dim_K = n_var + n_eq + n_ineq + 2 * n_sc;
 
     // initialize cones
     so_cones.resize(soc_dims.size());
     for (int i = 0; i < soc_dims.size(); i++)
     {
-        SecondOrderCone &sc = so_cones[i];
+        SOCone &sc = so_cones[i];
         sc.dim = soc_dims[i];
         sc.eta = 0.;
         sc.a = 0.;
@@ -178,14 +178,14 @@ void Solver::printSummary()
     print("- - - - - - - - - - - - - - -\n");
     print("|      Problem summary      |\n");
     print("- - - - - - - - - - - - - - -\n");
-    print("    Primal variables:  {}\n", num_var);
-    print("Equality constraints:  {}\n", num_eq);
-    print("     Conic variables:  {}\n", num_ineq);
+    print("    Primal variables:  {}\n", n_var);
+    print("Equality constraints:  {}\n", n_eq);
+    print("     Conic variables:  {}\n", n_ineq);
     print("- - - - - - - - - - - - - - -\n");
-    print("  Size of LP cone:     {}\n", num_pc);
-    print("  Number of SOCs:      {}\n", num_sc);
+    print("  Size of LP cone:     {}\n", n_lc);
+    print("  Number of SOCs:      {}\n", n_sc);
     print("- - - - - - - - - - - - - - -\n");
-    for (size_t i = 0; i < num_sc; i++)
+    for (size_t i = 0; i < n_sc; i++)
     {
         print("  Size of SOC #{}:      {}\n", i + 1, so_cones[i].dim);
     }
@@ -195,27 +195,27 @@ void Solver::printSummary()
 void Solver::allocate()
 {
     // Allocate work struct
-    w.allocate(num_var, num_eq, num_ineq);
+    w.allocate(n_var, n_eq, n_ineq);
 
     // Set up LP cone
-    lp_cone.v.resize(num_pc);
-    lp_cone.w.resize(num_pc);
+    lp_cone.v.resize(n_lc);
+    lp_cone.w.resize(n_lc);
 
     // Set up second-order cone
-    for (SecondOrderCone &sc : so_cones)
+    for (SOCone &sc : so_cones)
     {
         sc.q.resize(sc.dim - 1);
         sc.skbar.resize(sc.dim);
         sc.zkbar.resize(sc.dim);
     }
 
-    W_times_dzaff.resize(num_ineq);
-    dsaff_by_W.resize(num_ineq);
-    dsaff.resize(num_ineq);
+    W_times_dzaff.resize(n_ineq);
+    dsaff_by_W.resize(n_ineq);
+    dsaff.resize(n_ineq);
 
-    rx.resize(num_var);
-    ry.resize(num_eq);
-    rz.resize(num_ineq);
+    rx.resize(n_var);
+    ry.resize(n_eq);
+    rz.resize(n_ineq);
 
     rhs1.resize(dim_K);
     rhs2.resize(dim_K);
@@ -225,8 +225,8 @@ void Solver::allocate()
     Gt.reserve(G.nonZeros());
     At.reserve(A.nonZeros());
 
-    size_t KKT_ptr_size = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t KKT_ptr_size = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         KKT_ptr_size += 3 * sc.dim + 1;
     }
@@ -287,13 +287,13 @@ void equilibrateCols(const Eigen::VectorXd &e, Eigen::SparseMatrix<double> &m)
 
 void Solver::setEquilibration()
 {
-    x_equil.resize(num_var);
-    A_equil.resize(num_eq);
-    G_equil.resize(num_ineq);
+    x_equil.resize(n_var);
+    A_equil.resize(n_eq);
+    G_equil.resize(n_ineq);
 
-    Eigen::VectorXd x_tmp(num_var);
-    Eigen::VectorXd A_tmp(num_eq);
-    Eigen::VectorXd G_tmp(num_ineq);
+    Eigen::VectorXd x_tmp(n_var);
+    Eigen::VectorXd A_tmp(n_eq);
+    Eigen::VectorXd G_tmp(n_ineq);
 
     /* Initialize equilibration vector to 1 */
     x_equil.setOnes();
@@ -321,8 +321,8 @@ void Solver::setEquilibration()
         maxRows(G_tmp, G);
 
         /* Now collapse cones together by using total over the group */
-        size_t ind = num_pc;
-        for (const SecondOrderCone &sc : so_cones)
+        size_t ind = n_lc;
+        for (const SOCone &sc : so_cones)
         {
             const double total = G_tmp.segment(ind, sc.dim).sum();
             G_tmp.segment(ind, sc.dim).setConstant(total);
@@ -399,12 +399,12 @@ bool Solver::updateScalings(const Eigen::VectorXd &s,
                             Eigen::VectorXd &lambda)
 {
     /* LP cone */
-    lp_cone.v = s.head(num_pc).cwiseQuotient(z.head(num_pc));
+    lp_cone.v = s.head(n_lc).cwiseQuotient(z.head(n_lc));
     lp_cone.w = lp_cone.v.cwiseSqrt();
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (SOCone &sc : so_cones)
     {
         /* Check residuals and quit if they're negative */
         const double sres = s(cone_start) * s(cone_start) -
@@ -472,11 +472,11 @@ bool Solver::updateScalings(const Eigen::VectorXd &s,
 void Solver::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
 {
     /* LP cone */
-    lambda.head(num_pc) = lp_cone.w.cwiseProduct(z.head(num_pc));
+    lambda.head(n_lc) = lp_cone.w.cwiseProduct(z.head(n_lc));
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         /* zeta = q' * z1 */
         const double zeta = sc.q.dot(z.segment(cone_start + 1, sc.dim - 1));
@@ -639,7 +639,7 @@ void Solver::computeResiduals()
 
     /* rx = -A' * y - G' * z - tau * c */
     rx = -Gt * w.z;
-    if (num_eq > 0)
+    if (n_eq > 0)
     {
         rx -= At * w.y;
     }
@@ -647,7 +647,7 @@ void Solver::computeResiduals()
     rx -= w.tau * c;
 
     /* ry = A * x - tau * b */
-    if (num_eq > 0)
+    if (n_eq > 0)
     {
         ry = A * w.x;
         hresy = ry.norm();
@@ -665,7 +665,7 @@ void Solver::computeResiduals()
 
     /* rt = kappa + c' * x + b' * y + h' * z; */
     w.cx = c.dot(w.x);
-    w.by = num_eq > 0 ? b.dot(w.y) : 0.;
+    w.by = n_eq > 0 ? b.dot(w.y) : 0.;
     w.hz = h.dot(w.z);
     rt = w.kap + w.cx + w.by + w.hz;
 
@@ -678,7 +678,7 @@ void Solver::computeResiduals()
 void Solver::updateStatistics()
 {
     w.i.gap = w.s.dot(w.z);
-    w.i.mu = (w.i.gap + w.kap * w.tau) / ((num_pc + num_sc) + 1);
+    w.i.mu = (w.i.gap + w.kap * w.tau) / ((n_lc + n_sc) + 1);
     w.i.kapovert = w.kap / w.tau;
     w.i.pcost = w.cx / w.tau;
     w.i.dcost = -(w.hz + w.by) / w.tau;
@@ -698,7 +698,7 @@ void Solver::updateStatistics()
     }
 
     /* Residuals */
-    const double nry = num_eq > 0 ? ry.norm() / std::max(resy0 + nx, 1.) : 0.;
+    const double nry = n_eq > 0 ? ry.norm() / std::max(resy0 + nx, 1.) : 0.;
     const double nrz = rz.norm() / std::max(resz0 + nx + ns, 1.);
     w.i.pres = std::max(nry, nrz) / w.tau;
     w.i.dres = rx.norm() / std::max(resx0 + ny + nz, 1.) / w.tau;
@@ -752,7 +752,7 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
     // ===== 1. Find maximum residual =====
 
     /* LP cone */
-    for (size_t i = 0; i < num_pc; i++)
+    for (size_t i = 0; i < n_lc; i++)
     {
         if (r(i) <= 0 and -r(i) > alpha)
         {
@@ -761,8 +761,8 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
     }
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         const double cres = r(cone_start) -
                             r.segment(cone_start + 1, sc.dim - 1).norm();
@@ -780,11 +780,11 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
 
     /* LP cone */
     s = r;
-    s.head(num_pc).array() += alpha;
+    s.head(n_lc).array() += alpha;
 
     /* Second-order cone */
-    cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         s(cone_start) += alpha;
         cone_start += sc.dim;
@@ -796,13 +796,13 @@ void Solver::resetKKTScalings()
     size_t ptr_i = 0;
 
     /* LP cone */
-    for (size_t k = 0; k < num_pc; k++)
+    for (size_t k = 0; k < n_lc; k++)
     {
         *KKT_V_ptr[ptr_i++] = -1.;
     }
 
     /* Second-order cone */
-    for (const SecondOrderCone &sc : so_cones)
+    for (const SOCone &sc : so_cones)
     {
         /* D */
         for (size_t k = 0; k < sc.dim; k++)
@@ -848,11 +848,11 @@ exitcode Solver::solve(bool verbose)
     * 
     */
     rhs1.setZero();
-    rhs1.segment(num_var, num_eq) = b;
-    rhs1.segment(num_var + num_eq, num_pc) = h.head(num_pc);
-    size_t h_index = num_pc;
-    size_t rhs1_index = num_var + num_eq + num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    rhs1.segment(n_var, n_eq) = b;
+    rhs1.segment(n_var + n_eq, n_lc) = h.head(n_lc);
+    size_t h_index = n_lc;
+    size_t rhs1_index = n_var + n_eq + n_lc;
+    for (const SOCone &sc : so_cones)
     {
         rhs1.segment(rhs1_index, sc.dim) = h.segment(h_index, sc.dim);
         h_index += sc.dim;
@@ -868,7 +868,7 @@ exitcode Solver::solve(bool verbose)
     * 
     */
     rhs2.setZero();
-    rhs2.head(num_var) = -c;
+    rhs2.head(n_var) = -c;
 
     // Set up scalings of problem data
     const double scale_rx = c.norm();
@@ -911,9 +911,9 @@ exitcode Solver::solve(bool verbose)
 	 */
 
     /* Solve for RHS [0; b; h] */
-    Eigen::VectorXd dx1(num_var);
-    Eigen::VectorXd dy1(num_eq);
-    Eigen::VectorXd dz1(num_ineq);
+    Eigen::VectorXd dx1(n_var);
+    Eigen::VectorXd dy1(n_eq);
+    Eigen::VectorXd dz1(n_ineq);
     print_dbg("Solving for RHS1.\n");
     w.i.nitref1 = solveKKT(rhs1, dx1, dy1, dz1, true);
 
@@ -944,9 +944,9 @@ exitcode Solver::solve(bool verbose)
 	 */
 
     /* Solve for RHS [-c; 0; 0] */
-    Eigen::VectorXd dx2(num_var);
-    Eigen::VectorXd dy2(num_eq);
-    Eigen::VectorXd dz2(num_ineq);
+    Eigen::VectorXd dx2(n_var);
+    Eigen::VectorXd dy2(n_eq);
+    Eigen::VectorXd dz2(n_ineq);
     print_dbg("Solving for RHS2.\n");
     w.i.nitref2 = solveKKT(rhs2, dx2, dy2, dz2, true);
 
@@ -962,7 +962,7 @@ exitcode Solver::solve(bool verbose)
     * [ b ] -> [ b ] 
     * [ h ]    [ h ] 
     */
-    rhs1.head(num_var) = -c;
+    rhs1.head(n_var) = -c;
 
     /* other variables */
     w.kap = 1.,
@@ -1263,19 +1263,19 @@ void Solver::backscale()
  */
 void Solver::RHScombined()
 {
-    Eigen::VectorXd ds1(num_ineq);
-    Eigen::VectorXd ds2(num_ineq);
+    Eigen::VectorXd ds1(n_ineq);
+    Eigen::VectorXd ds2(n_ineq);
 
     /* ds = lambda o lambda + W \ s o Wz - sigma * mu * e) */
     conicProduct(w.lambda, w.lambda, ds1);
     conicProduct(dsaff_by_W, W_times_dzaff, ds2);
 
     const double sigmamu = w.i.sigma * w.i.mu;
-    ds1.head(num_pc) += ds2.head(num_pc);
-    ds1.head(num_pc).array() -= sigmamu;
+    ds1.head(n_lc) += ds2.head(n_lc);
+    ds1.head(n_lc).array() -= sigmamu;
 
-    size_t k = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t k = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         ds1(k) -= sigmamu;
         ds1.segment(k, sc.dim) += ds2.segment(k, sc.dim);
@@ -1289,12 +1289,12 @@ void Solver::RHScombined()
     /* copy in RHS */
     const double one_minus_sigma = 1. - w.i.sigma;
 
-    rhs2.head(num_var + num_eq) *= one_minus_sigma;
-    rhs2.segment(num_var + num_eq, num_pc) = -one_minus_sigma * rz.head(num_pc) +
-                                             ds1.head(num_pc);
-    size_t rhs_index = num_var + num_eq + num_pc;
-    k = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    rhs2.head(n_var + n_eq) *= one_minus_sigma;
+    rhs2.segment(n_var + n_eq, n_lc) = -one_minus_sigma * rz.head(n_lc) +
+                                       ds1.head(n_lc);
+    size_t rhs_index = n_var + n_eq + n_lc;
+    k = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         rhs2.segment(rhs_index, sc.dim) = -one_minus_sigma * rz.segment(k, sc.dim) +
                                           ds1.segment(k, sc.dim);
@@ -1314,11 +1314,11 @@ void Solver::conicDivision(const Eigen::VectorXd &u,
                            Eigen::VectorXd &v)
 {
     /* LP cone */
-    v.head(num_pc) = w.head(num_pc).cwiseQuotient(u.head(num_pc));
+    v.head(n_lc) = w.head(n_lc).cwiseQuotient(u.head(n_lc));
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         const double u0 = u(cone_start);
         const double w0 = w(cone_start);
@@ -1341,12 +1341,12 @@ double Solver::conicProduct(const Eigen::VectorXd &u,
                             Eigen::VectorXd &w)
 {
     /* LP cone */
-    w.head(num_pc) = u.head(num_pc).cwiseProduct(v.head(num_pc));
-    double mu = w.head(num_pc).lpNorm<1>();
+    w.head(n_lc) = u.head(n_lc).cwiseProduct(v.head(n_lc));
+    double mu = w.head(n_lc).lpNorm<1>();
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         const double u0 = u(cone_start);
         const double v0 = v(cone_start);
@@ -1364,10 +1364,10 @@ double Solver::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen::V
 {
     /* LP cone */
     double alpha;
-    if (num_pc > 0)
+    if (n_lc > 0)
     {
-        const double rhomin = (ds.head(num_pc).cwiseQuotient(lambda.head(num_pc))).minCoeff();
-        const double sigmamin = (dz.head(num_pc).cwiseQuotient(lambda.head(num_pc))).minCoeff();
+        const double rhomin = (ds.head(n_lc).cwiseQuotient(lambda.head(n_lc))).minCoeff();
+        const double sigmamin = (dz.head(n_lc).cwiseQuotient(lambda.head(n_lc))).minCoeff();
         const double eps = 1e-13;
         if (-sigmamin > -rhomin)
         {
@@ -1396,8 +1396,8 @@ double Solver::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen::V
     }
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         /* Normalize */
         const double lknorm2 = std::pow(lambda(cone_start), 2) -
@@ -1451,9 +1451,9 @@ double Solver::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen::V
 }
 
 size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
-                        Eigen::VectorXd &dx,        // num_var
-                        Eigen::VectorXd &dy,        // num_eq
-                        Eigen::VectorXd &dz,        // num_ineq
+                        Eigen::VectorXd &dx,        // n_var
+                        Eigen::VectorXd &dy,        // n_eq
+                        Eigen::VectorXd &dz,        // n_ineq
                         bool initialize)
 {
     Eigen::VectorXd x = ldlt.solve(rhs);
@@ -1463,10 +1463,10 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
     Eigen::VectorXd dx_ref(dim_K);                         // Refinement vector
 
-    const size_t mtilde = num_ineq + 2 * so_cones.size(); // Size of expanded cone block
+    const size_t mtilde = n_ineq + 2 * so_cones.size(); // Size of expanded cone block
 
-    const Eigen::VectorXd &bx = rhs.head(num_var);
-    const Eigen::VectorXd &by = rhs.segment(num_var, num_eq);
+    const Eigen::VectorXd &bx = rhs.head(n_var);
+    const Eigen::VectorXd &by = rhs.segment(n_var, n_eq);
     const Eigen::VectorXd &bz = rhs.tail(mtilde);
 
     print_dbg("IR: it  ||ex||   ||ey||   ||ez|| (threshold: {:2.3e})\n", error_threshold);
@@ -1477,25 +1477,25 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     for (k_ref = 0; k_ref <= settings.nitref; k_ref++)
     {
         /* Copy solution into arrays */
-        const Eigen::VectorXd &dx = x.head(num_var);
-        const Eigen::VectorXd &dy = x.segment(num_var, num_eq);
-        dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
-        size_t dz_index = num_pc;
-        size_t x_index = num_var + num_eq + num_pc;
-        for (const SecondOrderCone &sc : so_cones)
+        const Eigen::VectorXd &dx = x.head(n_var);
+        const Eigen::VectorXd &dy = x.segment(n_var, n_eq);
+        dz.head(n_lc) = x.segment(n_var + n_eq, n_lc);
+        size_t dz_index = n_lc;
+        size_t x_index = n_var + n_eq + n_lc;
+        for (const SOCone &sc : so_cones)
         {
             dz.segment(dz_index, sc.dim) = x.segment(x_index, sc.dim);
             dz_index += sc.dim;
             x_index += sc.dim + 2;
         }
-        assert(dz_index == num_ineq and x_index == dim_K);
+        assert(dz_index == n_ineq and x_index == dim_K);
 
         /* Compute error term */
 
         /* Error on dx */
         /* ex = bx - A' * dy - G' * dz */
         Eigen::VectorXd ex = bx - Gt * dz;
-        if (num_eq > 0)
+        if (n_eq > 0)
         {
             ex -= At * dy;
         }
@@ -1505,7 +1505,7 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         /* Error on dy */
         /* ey = by - A * dx */
         Eigen::VectorXd ey = by;
-        if (num_eq > 0)
+        if (n_eq > 0)
         {
             ey -= A * dx;
         }
@@ -1518,13 +1518,13 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* LP cone */
         Eigen::VectorXd ez(mtilde);
-        ez.head(num_pc) = bz.head(num_pc) - Gdx.head(num_pc) +
-                          settings.deltastat * dz.head(num_pc);
+        ez.head(n_lc) = bz.head(n_lc) - Gdx.head(n_lc) +
+                        settings.deltastat * dz.head(n_lc);
 
         /* Second-order cone */
-        size_t ez_index = num_pc;
-        dz_index = num_pc;
-        for (const SecondOrderCone &sc : so_cones)
+        size_t ez_index = n_lc;
+        dz_index = n_lc;
+        for (const SOCone &sc : so_cones)
         {
             ez.segment(ez_index, sc.dim) = bz.segment(ez_index, sc.dim) -
                                            Gdx.segment(dz_index, sc.dim);
@@ -1535,7 +1535,7 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
             ez(ez_index++) = 0.;
             ez(ez_index++) = 0.;
         }
-        assert(ez_index == mtilde and dz_index == num_ineq);
+        assert(ez_index == mtilde and dz_index == n_ineq);
 
         const Eigen::VectorXd &dz_true = x.tail(mtilde);
         if (initialize)
@@ -1552,7 +1552,7 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 
         /* maximum error (infinity norm of e) */
         double nerr = std::max(nex, nez);
-        if (num_eq > 0)
+        if (n_eq > 0)
         {
             nerr = std::max(nerr, ney);
         }
@@ -1585,18 +1585,18 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
     }
 
     /* Copy solution into arrays */
-    dx = x.head(num_var);
-    dy = x.segment(num_var, num_eq);
-    dz.head(num_pc) = x.segment(num_var + num_eq, num_pc);
-    size_t dz_index = num_pc;
-    size_t x_index = num_var + num_eq + num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    dx = x.head(n_var);
+    dy = x.segment(n_var, n_eq);
+    dz.head(n_lc) = x.segment(n_var + n_eq, n_lc);
+    size_t dz_index = n_lc;
+    size_t x_index = n_var + n_eq + n_lc;
+    for (const SOCone &sc : so_cones)
     {
         dz.segment(dz_index, sc.dim) = x.segment(x_index, sc.dim);
         dz_index += sc.dim;
         x_index += sc.dim + 2;
     }
-    assert(dz_index == num_ineq and x_index == dim_K);
+    assert(dz_index == n_ineq and x_index == dim_K);
 
     return k_ref;
 }
@@ -1611,11 +1611,11 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
 void Solver::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
 {
     /* LP cone */
-    y.head(num_pc) += lp_cone.v.cwiseProduct(x.head(num_pc));
+    y.head(n_lc) += lp_cone.v.cwiseProduct(x.head(n_lc));
 
     /* Second-order cone */
-    size_t cone_start = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    size_t cone_start = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         const size_t i1 = cone_start;
         const size_t i2 = i1 + 1;
@@ -1652,13 +1652,13 @@ void Solver::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
 void Solver::RHSaffine()
 {
     /* LP cone */
-    rhs2.head(num_var + num_eq) << rx, -ry;
+    rhs2.head(n_var + n_eq) << rx, -ry;
 
     /* Second-order cone */
-    rhs2.segment(num_var + num_eq, num_pc) = w.s.head(num_pc) - rz.head(num_pc);
-    size_t rhs_index = num_var + num_eq + num_pc;
-    size_t rz_index = num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    rhs2.segment(n_var + n_eq, n_lc) = w.s.head(n_lc) - rz.head(n_lc);
+    size_t rhs_index = n_var + n_eq + n_lc;
+    size_t rz_index = n_lc;
+    for (const SOCone &sc : so_cones)
     {
         rhs2.segment(rhs_index, sc.dim) =
             w.s.segment(rz_index, sc.dim) - rz.segment(rz_index, sc.dim);
@@ -1675,13 +1675,13 @@ void Solver::updateKKTScalings()
     size_t ptr_i = 0;
 
     /* LP cone */
-    for (size_t k = 0; k < num_pc; k++)
+    for (size_t k = 0; k < n_lc; k++)
     {
         *KKT_V_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
     }
 
     /* Second-order cone */
-    for (const SecondOrderCone &sc : so_cones)
+    for (const SOCone &sc : so_cones)
     {
         /* D */
         *KKT_V_ptr[ptr_i++] = -sc.eta_square * sc.d1 - settings.deltastat;
@@ -1722,7 +1722,7 @@ void Solver::setupKKT()
      * 
      *   V = blkdiag(I, blkdiag(I, 1, -1), ...,  blkdiag(I, 1, -1));
      *                    ^   number of second-order cones   ^
-     *               ^ dimension of positive contraints
+     *               ^ dimension of linear contraints
      * 
      *  Only the upper triangular part is constructed here.
      */
@@ -1731,10 +1731,10 @@ void Solver::setupKKT()
     // Number of non-zeros in KKT matrix
     size_t K_nonzeros = At.nonZeros() + Gt.nonZeros();
     // Static regularization
-    K_nonzeros += num_var + num_eq;
-    // Positive part of scaling block V
-    K_nonzeros += num_pc;
-    for (const SecondOrderCone &sc : so_cones)
+    K_nonzeros += n_var + n_eq;
+    // Linear part of scaling block V
+    K_nonzeros += n_lc;
+    for (const SOCone &sc : so_cones)
     {
         // SOC part of scaling block V
         K_nonzeros += 3 * sc.dim + 1;
@@ -1745,17 +1745,17 @@ void Solver::setupKKT()
     K_triplets.reserve(K_nonzeros);
 
     // I (1,1) Static regularization
-    for (size_t k = 0; k < num_var; k++)
+    for (size_t k = 0; k < n_var; k++)
     {
         K_triplets.emplace_back(k, k, settings.deltastat);
     }
     // I (2,2) Static regularization
-    for (size_t k = num_var; k < num_var + num_eq; k++)
+    for (size_t k = n_var; k < n_var + n_eq; k++)
     {
         K_triplets.emplace_back(k, k, -settings.deltastat);
     }
 
-    size_t col_K = num_var;
+    size_t col_K = n_var;
 
     // A' (1,2)
     for (int col = 0; col < At.cols(); col++)
@@ -1772,7 +1772,7 @@ void Solver::setupKKT()
         size_t col_Gt = 0;
 
         // Linear block
-        for (size_t col = 0; col < num_pc; col++)
+        for (size_t col = 0; col < n_lc; col++)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
             {
@@ -1783,7 +1783,7 @@ void Solver::setupKKT()
         }
 
         // SOC blocks
-        for (const SecondOrderCone &sc : so_cones)
+        for (const SOCone &sc : so_cones)
         {
             for (size_t col = 0; col < sc.dim; col++)
             {
@@ -1802,10 +1802,10 @@ void Solver::setupKKT()
 
     // -V (3,3)
     {
-        size_t diag_idx = num_var + num_eq;
+        size_t diag_idx = n_var + n_eq;
 
         // First identity block
-        for (size_t k = 0; k < num_pc; k++)
+        for (size_t k = 0; k < n_lc; k++)
         {
             K_triplets.emplace_back(diag_idx, diag_idx, -1.);
             diag_idx++;
@@ -1827,7 +1827,7 @@ void Solver::setupKKT()
          *
          *  Only the upper triangular part is constructed here.
          */
-        for (const SecondOrderCone &sc : so_cones)
+        for (const SOCone &sc : so_cones)
         {
             // D
             for (size_t k = 0; k < sc.dim; k++)
@@ -1878,7 +1878,7 @@ void Solver::cacheIndices()
 {
     // A AND G MATRICES
 
-    size_t col_K = num_var;
+    size_t col_K = n_var;
 
     // A' (1,2)
     for (int col = 0; col < At.cols(); col++)
@@ -1895,7 +1895,7 @@ void Solver::cacheIndices()
         size_t col_Gt = 0;
 
         // Linear block
-        for (size_t col = 0; col < num_pc; col++)
+        for (size_t col = 0; col < n_lc; col++)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
             {
@@ -1906,7 +1906,7 @@ void Solver::cacheIndices()
         }
 
         // SOC blocks
-        for (const SecondOrderCone &sc : so_cones)
+        for (const SOCone &sc : so_cones)
         {
             for (size_t col = 0; col < sc.dim; col++)
             {
@@ -1926,15 +1926,15 @@ void Solver::cacheIndices()
     // SCALING AND RESIDUALS -V (3,3)
 
     /* LP cone */
-    size_t diag_idx = num_var + num_eq;
-    for (size_t k = 0; k < num_pc; k++)
+    size_t diag_idx = n_var + n_eq;
+    for (size_t k = 0; k < n_lc; k++)
     {
         KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
         diag_idx++;
     }
 
     /* Second-order cone */
-    for (const SecondOrderCone &sc : so_cones)
+    for (const SOCone &sc : so_cones)
     {
         /* D */
         KKT_V_ptr.push_back(&K.coeffRef(diag_idx, diag_idx));
@@ -1987,7 +1987,7 @@ void Solver::updateKKTAG()
         size_t col_Gt = 0;
 
         // Linear block
-        for (size_t col = 0; col < num_pc; col++)
+        for (size_t col = 0; col < n_lc; col++)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
             {
@@ -1997,7 +1997,7 @@ void Solver::updateKKTAG()
         }
 
         // SOC blocks
-        for (const SecondOrderCone &sc : so_cones)
+        for (const SOCone &sc : so_cones)
         {
             for (size_t col = 0; col < sc.dim; col++)
             {
@@ -2046,17 +2046,17 @@ void Solver::updateData(double *Gpr, double *Apr,
     {
         for (int i = 0; i < G.nonZeros(); i++)
             G.valuePtr()[i] = Gpr[i];
-        this->h = Eigen::Map<Eigen::VectorXd>(h, num_ineq);
+        this->h = Eigen::Map<Eigen::VectorXd>(h, n_ineq);
     }
     if (Apr)
     {
         for (int i = 0; i < A.nonZeros(); i++)
             A.valuePtr()[i] = Apr[i];
-        this->b = Eigen::Map<Eigen::VectorXd>(b, num_eq);
+        this->b = Eigen::Map<Eigen::VectorXd>(b, n_eq);
     }
     if (c)
     {
-        this->c = Eigen::Map<Eigen::VectorXd>(c, num_var);
+        this->c = Eigen::Map<Eigen::VectorXd>(c, n_var);
     }
 
     setEquilibration();
