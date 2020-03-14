@@ -159,6 +159,8 @@ public:
 
     const Eigen::VectorXd &solution() const;
 
+    // void saveProblemData(const std::string &path = "problem_data.hpp");
+
 private:
     void build(const Eigen::SparseMatrix<double> &G,
                const Eigen::SparseMatrix<double> &A,

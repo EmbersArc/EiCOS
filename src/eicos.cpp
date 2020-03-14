@@ -2017,8 +2017,8 @@ void Solver::updateData(const Eigen::SparseMatrix<double> &G,
                         const Eigen::VectorXd &h,
                         const Eigen::VectorXd &b)
 {
-    if (equibrilated)
-        unsetEquilibration();
+    // if (equibrilated)
+    //     unsetEquilibration();
 
     for (int i = 0; i < G.nonZeros(); i++)
         this->G.valuePtr()[i] = G.valuePtr()[i];
@@ -2066,5 +2066,87 @@ void Solver::updateData(double *Gpr, double *Apr,
 
     updateKKTAG();
 }
+
+// void Solver::saveProblemData(const std::string &path)
+// {
+//     std::ofstream out(path);
+
+//     Eigen::IOFormat formatter(Eigen::FullPrecision, Eigen::DontAlignCols, ", ");
+
+//     print(out, "idxint n = {};\n", n_var);
+//     print(out, "idxint m = {};\n", n_ineq);
+//     print(out, "idxint p = {};\n", n_eq);
+//     print(out, "idxint l = {};\n", n_lc);
+//     print(out, "idxint ncones = {};\n", n_sc);
+
+//     if (n_sc > 0)
+//     {
+//         Eigen::VectorXi q(n_sc);
+//         for (int i = 0; i < q.size(); i++)
+//         {
+//             q(i) = so_cones[i].dim;
+//         }
+//         print(out, "idxint q[{}] = {{{}}};\n", q.size(), q.transpose().format(formatter));
+//     }
+
+//     print(out, "pfloat c[{}] = {{{}}};\n", c.size(), c.transpose().format(formatter));
+
+//     if (n_eq > 0)
+//     {
+//         print(out, "pfloat b[{}] = {{{}}};\n", b.size(), b.transpose().format(formatter));
+//     }
+//     else
+//     {
+//         print(out, "pfloat *b = NULL;\n");
+//     }
+
+//     if (n_ineq > 0)
+//     {
+//         print(out, "pfloat h[{}] = {{{}}};\n", h.size(), h.transpose().format(formatter));
+//     }
+//     else
+//     {
+//         print(out, "pfloat *h = NULL;\n");
+//     }
+
+//     if (G.nonZeros() > 0)
+//     {
+//         print(out, "idxint Gjc[{}] = {{{}}};\n",
+//               G.nonZeros(),
+//               Eigen::Map<Eigen::VectorXi>(G.outerIndexPtr(), G.nonZeros()).transpose().format(formatter));
+//         print(out, "idxint Gir[{}] = {{{}}};\n",
+//               G.nonZeros(),
+//               Eigen::Map<Eigen::VectorXi>(G.innerIndexPtr(), G.nonZeros()).transpose().format(formatter));
+//         print(out, "pfloat Gpr[{}] = {{{}}};\n",
+//               G.nonZeros(),
+//               Eigen::Map<Eigen::VectorXd>(G.valuePtr(), G.nonZeros()).transpose().format(formatter));
+//     }
+//     else
+//     {
+//         print(out, "pfloat *Gpr = NULL;\n");
+//         print(out, "idxint *Gir = NULL;\n");
+//         print(out, "idxint *Gpr = NULL;\n");
+//     }
+
+//     if (A.nonZeros() > 0)
+//     {
+//         print(out, "idxint Ajc[{}] = {{{}}};\n",
+//               A.nonZeros(),
+//               Eigen::Map<Eigen::VectorXi>(A.outerIndexPtr(), A.nonZeros()).transpose().format(formatter));
+//         print(out, "idxint Air[{}] = {{{}}};\n",
+//               A.nonZeros(),
+//               Eigen::Map<Eigen::VectorXi>(A.innerIndexPtr(), A.nonZeros()).transpose().format(formatter));
+//         print(out, "pfloat Apr[{}] = {{{}}};\n",
+//               A.nonZeros(),
+//               Eigen::Map<Eigen::VectorXd>(A.valuePtr(), A.nonZeros()).transpose().format(formatter));
+//     }
+//     else
+//     {
+//         print(out, "pfloat *Apr = NULL;\n");
+//         print(out, "idxint *Air = NULL;\n");
+//         print(out, "idxint *Apr = NULL;\n");
+//     }
+//     out.close();
+// }
 
 } // namespace EiCOS
