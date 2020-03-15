@@ -47,7 +47,7 @@ and the remaining rows contain stacked representations of the second order cones
 \begin{gathered}
 \lVert F_ix + g_i \rVert \leq v_i^T x + w_i \\
 \Leftrightarrow \\
-\begin{bmatrix} v_i^T \\ -F_i \end{bmatrix} \preceq \begin{bmatrix} w_i \\ g_i \end{bmatrix} \\
+-\begin{bmatrix} v_i^T \\ F_i \end{bmatrix} \preceq \begin{bmatrix} w_i \\ g_i \end{bmatrix} \\
 i = 1,...,n_{cones}
 \\
 \text{with} \\
@@ -57,7 +57,7 @@ w_i \in \mathbb{R} \\
 g_i \in \mathbb{R}^{q_i-1} \\
 \end{gathered}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbg_white%20%5Cbegin%7Bgathered%7D%20%5ClVert%20F_ix%20&plus;%20g_i%20%5CrVert%20%5Cleq%20v_i%5ET%20x%20&plus;%20w_i%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20%5Cbegin%7Bbmatrix%7D%20v_i%5ET%20%5C%5C%20-F_i%20%5Cend%7Bbmatrix%7D%20%5Cpreceq%20%5Cbegin%7Bbmatrix%7D%20w_i%20%5C%5C%20g_i%20%5Cend%7Bbmatrix%7D%20%5C%5C%20i%20%3D%201%2C...%2Cn_%7Bcones%7D%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20v_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20F_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20w_i%20%5Cin%20%5Cmathbb%7BR%7D%20%5C%5C%20g_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
+![equation](https://latex.codecogs.com/svg.latex?%5Cbegin%7Bgathered%7D%20%5ClVert%20F_ix%20&plus;%20g_i%20%5CrVert%20%5Cleq%20v_i%5ET%20x%20&plus;%20w_i%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20-%5Cbegin%7Bbmatrix%7D%20v_i%5ET%20%5C%5C%20F_i%20%5Cend%7Bbmatrix%7D%20%5Cpreceq%20%5Cbegin%7Bbmatrix%7D%20w_i%20%5C%5C%20g_i%20%5Cend%7Bbmatrix%7D%20%5C%5C%20i%20%3D%201%2C...%2Cn_%7Bcones%7D%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20v_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20F_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20w_i%20%5Cin%20%5Cmathbb%7BR%7D%20%5C%5C%20g_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
 
 ### Usage
 ```cpp
