@@ -125,6 +125,8 @@ void Solver::build(const Eigen::SparseMatrix<double> &G,
                    const Eigen::VectorXd &b,
                    const Eigen::VectorXi &soc_dims)
 {
+    assert(not(c.hasNaN() or h.hasNaN() or b.hasNaN()));
+
     this->G = G;
     this->A = A;
     this->c = c;
@@ -402,7 +404,7 @@ bool Solver::updateScalings(const Eigen::VectorXd &s,
     lp_cone.v = s.head(n_lc).cwiseQuotient(z.head(n_lc));
     lp_cone.w = lp_cone.v.cwiseSqrt();
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (SOCone &sc : so_cones)
     {
@@ -467,14 +469,13 @@ bool Solver::updateScalings(const Eigen::VectorXd &s,
 /**
  * Fast multiplication by scaling matrix.
  * Returns lambda = W * z
- * The exponential variables are not touched.
  */
 void Solver::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
 {
     /* LP cone */
     lambda.head(n_lc) = lp_cone.w.cwiseProduct(z.head(n_lc));
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -749,7 +750,7 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
 {
     double alpha = -settings.gamma;
 
-    // ===== 1. Find maximum residual =====
+    /* ===== 1. Find maximum residual ===== */
 
     /* LP cone */
     for (size_t i = 0; i < n_lc; i++)
@@ -760,7 +761,7 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
         }
     }
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -774,7 +775,7 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
         }
     }
 
-    // ===== 2. Compute s = r + (1 + alpha) * e =====
+    /* ===== 2. Compute s = r + (1 + alpha) * e ===== */
 
     alpha += 1.;
 
@@ -782,7 +783,7 @@ void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
     s = r;
     s.head(n_lc).array() += alpha;
 
-    /* Second-order cone */
+    /* SO cone */
     cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -801,7 +802,7 @@ void Solver::resetKKTScalings()
         *KKT_V_ptr[ptr_i++] = -1.;
     }
 
-    /* Second-order cone */
+    /* SO cone */
     for (const SOCone &sc : so_cones)
     {
         /* D */
@@ -870,7 +871,7 @@ exitcode Solver::solve(bool verbose)
     rhs2.setZero();
     rhs2.head(n_var) = -c;
 
-    // Set up scalings of problem data
+    /*  Set up scalings of problem data */
     const double scale_rx = c.norm();
     const double scale_ry = b.norm();
     const double scale_rz = h.norm();
@@ -878,10 +879,10 @@ exitcode Solver::solve(bool verbose)
     resy0 = std::max(1., scale_ry);
     resz0 = std::max(1., scale_rz);
 
-    // Perform symbolic decomposition
+    /* Perform symbolic decomposition */
     ldlt.analyzePattern(K);
 
-    // Do LDLT factorization
+    /* Do LDLT factorization */
     ldlt.factorize(K);
     if (ldlt.info() != Eigen::Success)
     {
@@ -964,7 +965,7 @@ exitcode Solver::solve(bool verbose)
     */
     rhs1.head(n_var) = -c;
 
-    /* other variables */
+    /* Other variables */
     w.kap = 1.,
     w.tau = 1.,
 
@@ -976,7 +977,7 @@ exitcode Solver::solve(bool verbose)
 
     double pres_prev = std::numeric_limits<double>::max();
 
-    // Main interior point loop
+    /* Main interior point loop */
     for (w.i.iter = 0; w.i.iter <= w.i.iter_max; w.i.iter++)
     {
         computeResiduals();
@@ -1092,14 +1093,14 @@ exitcode Solver::solve(bool verbose)
                 }
                 break;
             }
-            /* stuck on NAN? */
+            /* Stuck on NAN? */
             else if (std::isnan(w.i.pcost))
             {
                 if (settings.verbose)
-                    print("\nReached NaN dead end, \n");
+                    print("\nReached NaN dead end, ");
 
                 /* Determine whether current iterate is better than what we had so far */
-                if (w.i.isBetterThan(w_best.i))
+                if (w.i.iter == 0 or w.i.isBetterThan(w_best.i))
                 {
                     if (settings.verbose)
                         print("stopping.\n");
@@ -1109,14 +1110,14 @@ exitcode Solver::solve(bool verbose)
                     if (settings.verbose)
                         print("recovering best iterate ({}) and stopping.\n", w_best.i.iter);
                     w = w_best;
-                }
 
-                /* Determine whether we have reached reduced precision */
-                code = checkExitConditions(true);
-                if (code == exitcode::not_converged_yet)
-                {
-                    code = exitcode::numerics;
-                    print("stopping without convergence.\n");
+                    /* Determine whether we have reached reduced precision */
+                    code = checkExitConditions(true);
+                    if (code == exitcode::not_converged_yet)
+                    {
+                        code = exitcode::numerics;
+                        print("stopping without convergence.\n");
+                    }
                 }
                 break;
             }
@@ -1237,7 +1238,7 @@ exitcode Solver::solve(bool verbose)
         w.tau += w.i.step * dtau;
     }
 
-    /* scale variables back */
+    /* Scale variables back */
     backscale();
 
     return code;
@@ -1316,7 +1317,7 @@ void Solver::conicDivision(const Eigen::VectorXd &u,
     /* LP cone */
     v.head(n_lc) = w.head(n_lc).cwiseQuotient(u.head(n_lc));
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -1344,7 +1345,7 @@ double Solver::conicProduct(const Eigen::VectorXd &u,
     w.head(n_lc) = u.head(n_lc).cwiseProduct(v.head(n_lc));
     double mu = w.head(n_lc).lpNorm<1>();
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -1395,7 +1396,7 @@ double Solver::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen::V
         alpha = minus_kap_by_dkap;
     }
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -1521,7 +1522,7 @@ size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
         ez.head(n_lc) = bz.head(n_lc) - Gdx.head(n_lc) +
                         settings.deltastat * dz.head(n_lc);
 
-        /* Second-order cone */
+        /* SO cone */
         size_t ez_index = n_lc;
         dz_index = n_lc;
         for (const SOCone &sc : so_cones)
@@ -1613,7 +1614,7 @@ void Solver::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
     /* LP cone */
     y.head(n_lc) += lp_cone.v.cwiseProduct(x.head(n_lc));
 
-    /* Second-order cone */
+    /* SO cone */
     size_t cone_start = n_lc;
     for (const SOCone &sc : so_cones)
     {
@@ -1654,7 +1655,7 @@ void Solver::RHSaffine()
     /* LP cone */
     rhs2.head(n_var + n_eq) << rx, -ry;
 
-    /* Second-order cone */
+    /* SO cone */
     rhs2.segment(n_var + n_eq, n_lc) = w.s.head(n_lc) - rz.head(n_lc);
     size_t rhs_index = n_var + n_eq + n_lc;
     size_t rz_index = n_lc;
@@ -1680,7 +1681,7 @@ void Solver::updateKKTScalings()
         *KKT_V_ptr[ptr_i++] = -lp_cone.v(k) - settings.deltastat;
     }
 
-    /* Second-order cone */
+    /* SO cone */
     for (const SOCone &sc : so_cones)
     {
         /* D */
@@ -1728,15 +1729,15 @@ void Solver::setupKKT()
      */
     K.resize(dim_K, dim_K);
 
-    // Number of non-zeros in KKT matrix
+    /* Number of non-zeros in KKT matrix */
     size_t K_nonzeros = At.nonZeros() + Gt.nonZeros();
-    // Static regularization
+    /* Static regularization */
     K_nonzeros += n_var + n_eq;
-    // Linear part of scaling block V
+    /* Linear part of scaling block V */
     K_nonzeros += n_lc;
     for (const SOCone &sc : so_cones)
     {
-        // SOC part of scaling block V
+        /* SOC part of scaling block V */
         K_nonzeros += 3 * sc.dim + 1;
     }
     K.reserve(K_nonzeros);
@@ -1744,12 +1745,12 @@ void Solver::setupKKT()
     std::vector<Eigen::Triplet<double>> K_triplets;
     K_triplets.reserve(K_nonzeros);
 
-    // I (1,1) Static regularization
+    /* I (1,1) Static regularization */
     for (size_t k = 0; k < n_var; k++)
     {
         K_triplets.emplace_back(k, k, settings.deltastat);
     }
-    // I (2,2) Static regularization
+    /* I (2,2) Static regularization */
     for (size_t k = n_var; k < n_var + n_eq; k++)
     {
         K_triplets.emplace_back(k, k, -settings.deltastat);
@@ -1757,7 +1758,7 @@ void Solver::setupKKT()
 
     size_t col_K = n_var;
 
-    // A' (1,2)
+    /* A' (1,2) */
     for (int col = 0; col < At.cols(); col++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
@@ -1767,11 +1768,11 @@ void Solver::setupKKT()
         col_K++;
     }
 
-    // G' (1,3)
+    /* G' (1,3) */
     {
         size_t col_Gt = 0;
 
-        // Linear block
+        /* Linear block */
         for (size_t col = 0; col < n_lc; col++)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
@@ -1782,7 +1783,7 @@ void Solver::setupKKT()
             col_K++;
         }
 
-        // SOC blocks
+        /* SOC blocks */
         for (const SOCone &sc : so_cones)
         {
             for (size_t col = 0; col < sc.dim; col++)
@@ -1800,18 +1801,18 @@ void Solver::setupKKT()
         assert(col_Gt == size_t(Gt.cols()));
     }
 
-    // -V (3,3)
+    /* -V (3,3) */
     {
         size_t diag_idx = n_var + n_eq;
 
-        // First identity block
+        /* First identity block */
         for (size_t k = 0; k < n_lc; k++)
         {
             K_triplets.emplace_back(diag_idx, diag_idx, -1.);
             diag_idx++;
         }
 
-        // SOC blocks
+        /* SOC blocks */
         /**
          * The scaling matrix has the following structure:
          *
@@ -1829,27 +1830,27 @@ void Solver::setupKKT()
          */
         for (const SOCone &sc : so_cones)
         {
-            // D
+            /* D */
             for (size_t k = 0; k < sc.dim; k++)
             {
                 K_triplets.emplace_back(diag_idx, diag_idx, -1.);
                 diag_idx++;
             }
 
-            // -1 on diagonal
+            /* -1 on diagonal */
             K_triplets.emplace_back(diag_idx, diag_idx, -1.);
 
-            // -v
+            /* -v */
             for (size_t k = 1; k < sc.dim; k++)
             {
                 K_triplets.emplace_back(diag_idx - sc.dim + k, diag_idx, 0.);
             }
             diag_idx++;
 
-            // 1 on diagonal
+            /* 1 on diagonal */
             K_triplets.emplace_back(diag_idx, diag_idx, 1.);
 
-            // -u
+            /* -u */
             for (size_t k = 0; k < sc.dim; k++)
             {
                 K_triplets.emplace_back(diag_idx - sc.dim - 1 + k, diag_idx, 0.);
@@ -1876,11 +1877,11 @@ void Solver::setupKKT()
  */
 void Solver::cacheIndices()
 {
-    // A AND G MATRICES
+    /* A AND G MATRICES */
 
     size_t col_K = n_var;
 
-    // A' (1,2)
+    /* A' (1,2) */
     for (int col = 0; col < At.cols(); col++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
@@ -1890,11 +1891,11 @@ void Solver::cacheIndices()
         col_K++;
     }
 
-    // G' (1,3)
+    /* G' (1,3) */
     {
         size_t col_Gt = 0;
 
-        // Linear block
+        /* Linear block */
         for (size_t col = 0; col < n_lc; col++)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
@@ -1905,7 +1906,7 @@ void Solver::cacheIndices()
             col_K++;
         }
 
-        // SOC blocks
+        /* SOC blocks */
         for (const SOCone &sc : so_cones)
         {
             for (size_t col = 0; col < sc.dim; col++)
@@ -1923,7 +1924,7 @@ void Solver::cacheIndices()
         assert(col_Gt == size_t(Gt.cols()));
     }
 
-    // SCALING AND RESIDUALS -V (3,3)
+    /* SCALING AND RESIDUALS -V (3,3) */
 
     /* LP cone */
     size_t diag_idx = n_var + n_eq;
@@ -1933,7 +1934,7 @@ void Solver::cacheIndices()
         diag_idx++;
     }
 
-    /* Second-order cone */
+    /* SO cone */
     for (const SOCone &sc : so_cones)
     {
         /* D */
@@ -1973,7 +1974,7 @@ void Solver::updateKKTAG()
 {
     size_t ptr_i = 0;
 
-    // A' (1,2)
+    /* A' (1,2) */
     for (int col = 0; col < At.cols(); col++)
     {
         for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
@@ -1982,11 +1983,11 @@ void Solver::updateKKTAG()
         }
     }
 
-    // G' (1,3)
+    /* G' (1,3) */
     {
         size_t col_Gt = 0;
 
-        // Linear block
+        /* Linear block */
         for (size_t col = 0; col < n_lc; col++)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
@@ -1996,7 +1997,7 @@ void Solver::updateKKTAG()
             col_Gt++;
         }
 
-        // SOC blocks
+        /* SOC blocks */
         for (const SOCone &sc : so_cones)
         {
             for (size_t col = 0; col < sc.dim; col++)
@@ -2017,9 +2018,6 @@ void Solver::updateData(const Eigen::SparseMatrix<double> &G,
                         const Eigen::VectorXd &h,
                         const Eigen::VectorXd &b)
 {
-    // if (equibrilated)
-    //     unsetEquilibration();
-
     for (int i = 0; i < G.nonZeros(); i++)
         this->G.valuePtr()[i] = G.valuePtr()[i];
     for (int i = 0; i < A.nonZeros(); i++)
