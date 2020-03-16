@@ -1,5 +1,6 @@
 #include "eicos.hpp"
 
+#include <chrono>
 #include <Eigen/SparseCholesky>
 #include "printing.hpp"
 
@@ -836,6 +837,8 @@ void Solver::resetKKTScalings()
 
 exitcode Solver::solve(bool verbose)
 {
+    auto t0 = std::chrono::high_resolution_clock::now();
+
     settings.verbose = verbose;
     exitcode code = exitcode::fatal;
 
@@ -1241,6 +1244,9 @@ exitcode Solver::solve(bool verbose)
 
     /* Scale variables back */
     backscale();
+
+    if (settings.verbose)
+        print("Runtime: {}ms\n", std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count());
 
     return code;
 }
