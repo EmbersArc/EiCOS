@@ -177,23 +177,24 @@ void Solver::build(const Eigen::SparseMatrix<double> &G,
 
 void Solver::printSummary()
 {
-    print("- - - - - - - - - - - - - - -\n");
-    print("|      Problem summary      |\n");
-    print("- - - - - - - - - - - - - - -\n");
-    print("    Primal variables:  {}\n", n_var);
-    print("Equality constraints:  {}\n", n_eq);
-    print("     Conic variables:  {}\n", n_ineq);
-    print("- - - - - - - - - - - - - - -\n");
-    print("  Size of LP cone:     {}\n", n_lc);
-    print("  Number of SOCs:      {}\n", n_sc);
-    print("- - - - - - - - - - - - - - -\n");
+    print_dbg("- - - - - - - - - - - - - - -\n");
+    print_dbg("|      Problem summary      |\n");
+    print_dbg("- - - - - - - - - - - - - - -\n");
+    print_dbg("    Primal variables:  {}\n", n_var);
+    print_dbg("Equality constraints:  {}\n", n_eq);
+    print_dbg("     Conic variables:  {}\n", n_ineq);
+    print_dbg("- - - - - - - - - - - - - - -\n");
+    print_dbg("  Size of LP cone:     {}\n", n_lc);
+    print_dbg("  Number of SOCs:      {}\n", n_sc);
+    print_dbg("- - - - - - - - - - - - - - -\n");
     for (size_t i = 0; i < n_sc; i++)
     {
-        print("  Size of SOC #{}:      {}\n", i + 1, so_cones[i].dim);
+        print_dbg("  Size of SOC #{}:      {}\n", i + 1, so_cones[i].dim);
     }
-    print("- - - - - - - - - - - - - - -\n");
+    print_dbg("- - - - - - - - - - - - - - -\n");
 }
 
+/* Incomplete allocation. Heap is still used later.*/
 void Solver::allocate()
 {
     // Allocate work struct
