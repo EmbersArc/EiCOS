@@ -9,7 +9,7 @@ A C++ Second Order Cone Solver for problems of the form
 &Gx \preceq_K h
 \end{aligend}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbg_white%20%5Cbegin%7Baligned%7D%20%5Ctext%7Bminimize%7D%20%5C%20%5C%20%26c%5ET%20x%20%5C%5C%20%5Ctext%7Bsubject%20to%7D%20%5C%20%5C%20%26Ax%20%3D%20b%20%5C%5C%20%26Gx%20%5Cpreceq_K%20h%20%5Cend%7Baligend%7D)
+![equation](https://latex.codecogs.com/svg.latex?\begin{aligned}&space;\text{minimize}&space;\&space;\&space;&c^T&space;x&space;\\&space;\text{subject&space;to}&space;\&space;\&space;&Ax&space;=&space;b&space;\\&space;&Gx&space;\preceq_K&space;h&space;\end{aligend})
 
 <!-- 
 \begin{align*}
@@ -27,7 +27,7 @@ n_{pc} & \dots\text{Number of positive constraints (dimension of positive orthan
 n_{cones} & \dots\text{Number of second order cones in K} \\
 \end{align*}
 -->
-![symbols](https://latex.codecogs.com/svg.latex?%5Cbg_white%20%5Cbegin%7Balign*%7D%20x%20%26%20%5Cdots%5Ctext%7BVariable%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20G%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20A%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20c%20%26%20%5Cdots%5Ctext%7BVariable%20weight%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20h%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%7D%20%5C%5C%20b%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20q%20%26%20%5Cdots%5Ctext%7BVector%20containing%20dimension%20of%20each%20cone%20constraint%7D%20%5Cin%20%5Cmathbb%7BN%7D%5E%7Bn_%7Bcones%7D%7D%20%5C%5C%5C%5C%20n_%7Bvar%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20variables%7D%20%5C%5C%20n_%7Beq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20equality%20constraints%7D%20%5C%5C%20n_%7Bineq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20inequality%20constraints%7D%20%5C%5C%20n_%7Bpc%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20positive%20constraints%20%28dimension%20of%20positive%20orthant%29%7D%20%5C%5C%20n_%7Bcones%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20second%20order%20cones%20in%20K%7D%20%5C%5C%20%5Cend%7Balign*%7D)
+![symbols](https://latex.codecogs.com/svg.latex?\begin{align*}&space;x&space;&&space;\dots\text{Variable&space;vector}&space;\in&space;\mathbb{R}^{n_{var}}&space;\\&space;G&space;&&space;\dots\text{Inequality&space;constraint&space;matrix}&space;\in&space;\mathbb{R}^{n_{ineq}&space;\times&space;n_{var}}&space;\\&space;A&space;&&space;\dots\text{Equality&space;constraint&space;matrix}&space;\in&space;\mathbb{R}^{n_{eq}&space;\times&space;n_{var}}&space;\\&space;c&space;&&space;\dots\text{Variable&space;weight&space;vector}&space;\in&space;\mathbb{R}^{n_{var}}&space;\\&space;h&space;&&space;\dots\text{Inequality&space;constraint&space;vector}&space;\in&space;\mathbb{R}^{n_{ineq}}&space;\\&space;b&space;&&space;\dots\text{Equality&space;constraint&space;vector}&space;\in&space;\mathbb{R}^{n_{eq}}&space;\\&space;q&space;&&space;\dots\text{Vector&space;containing&space;dimension&space;of&space;each&space;cone&space;constraint}&space;\in&space;\mathbb{N}^{n_{cones}}&space;\\\\&space;n_{var}&space;&&space;\dots\text{Number&space;of&space;variables}&space;\\&space;n_{eq}&space;&&space;\dots\text{Number&space;of&space;equality&space;constraints}&space;\\&space;n_{ineq}&space;&&space;\dots\text{Number&space;of&space;inequality&space;constraints}&space;\\&space;n_{pc}&space;&&space;\dots\text{Number&space;of&space;positive&space;constraints&space;(dimension&space;of&space;positive&space;orthant)}&space;\\&space;n_{cones}&space;&&space;\dots\text{Number&space;of&space;second&space;order&space;cones&space;in&space;K}&space;\\&space;\end{align*})
 
 The last constraint is generalized and includes both the positive orthant and second order cones, so that the top rows of `G` represent the linear constraints
 <!--
@@ -40,7 +40,7 @@ C \in \mathbb{R}^{n_{eq} \times n_{var}} \\
 d \in \mathbb{R}^{n_{eq}} \\
 \end{gathered}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbg_white%20%5Cbegin%7Bgathered%7D%20Cx%20%5Cleq%20d%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20C%20%5Cpreceq%20d%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20C%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20d%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
+![equation](https://latex.codecogs.com/svg.latex?\begin{gathered}&space;Cx&space;\leq&space;d&space;\\&space;\Leftrightarrow&space;\\&space;C&space;\preceq&space;d&space;\\&space;\text{with}&space;\\&space;C&space;\in&space;\mathbb{R}^{n_{eq}&space;\times&space;n_{var}}&space;\\&space;d&space;\in&space;\mathbb{R}^{n_{eq}}&space;\\&space;\end{gathered})
 
 and the remaining rows contain stacked representations of the second order cones:
 <!--
@@ -57,7 +57,7 @@ w_i \in \mathbb{R} \\
 g_i \in \mathbb{R}^{q_i-1} \\
 \end{gathered}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbegin%7Bgathered%7D%20%5ClVert%20F_ix%20&plus;%20g_i%20%5CrVert%20%5Cleq%20v_i%5ET%20x%20&plus;%20w_i%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20-%5Cbegin%7Bbmatrix%7D%20v_i%5ET%20%5C%5C%20F_i%20%5Cend%7Bbmatrix%7D%20%5Cpreceq%20%5Cbegin%7Bbmatrix%7D%20w_i%20%5C%5C%20g_i%20%5Cend%7Bbmatrix%7D%20%5C%5C%20i%20%3D%201%2C...%2Cn_%7Bcones%7D%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20v_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20F_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20w_i%20%5Cin%20%5Cmathbb%7BR%7D%20%5C%5C%20g_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
+![equation](https://latex.codecogs.com/svg.latex?\begin{gathered}&space;\lVert&space;F_ix&space;&plus;&space;g_i&space;\rVert&space;\leq&space;v_i^T&space;x&space;&plus;&space;w_i&space;\\&space;\Leftrightarrow&space;\\&space;-\begin{bmatrix}&space;v_i^T&space;\\&space;F_i&space;\end{bmatrix}&space;\preceq&space;\begin{bmatrix}&space;w_i&space;\\&space;g_i&space;\end{bmatrix}&space;\\&space;i&space;=&space;1,...,n_{cones}&space;\\&space;\text{with}&space;\\&space;v_i&space;\in&space;\mathbb{R}^{n_{var}}&space;\\&space;F_i&space;\in&space;\mathbb{R}^{q_i-1&space;\times&space;n_{var}}&space;\\&space;w_i&space;\in&space;\mathbb{R}&space;\\&space;g_i&space;\in&space;\mathbb{R}^{q_i-1}&space;\\&space;\end{gathered})
 
 ### Usage
 ```cpp
