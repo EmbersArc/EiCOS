@@ -27,7 +27,7 @@ n_{pc} & \dots\text{Number of positive constraints (dimension of positive orthan
 n_{cones} & \dots\text{Number of second order cones in K} \\
 \end{align*}
 -->
-![symbols](https://latex.codecogs.com/svg.latex?%5Cbegin%7Balign*%7D%20x%20%26%20%5Cdots%5Ctext%7BVariable%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20G%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20A%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20matrix%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20c%20%26%20%5Cdots%5Ctext%7BVariable%20weight%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20h%20%26%20%5Cdots%5Ctext%7BInequality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bineq%7D%7D%20%5C%5C%20b%20%26%20%5Cdots%5Ctext%7BEquality%20constraint%20vector%7D%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20q%20%26%20%5Cdots%5Ctext%7BVector%20containing%20dimension%20of%20each%20cone%20constraint%7D%20%5Cin%20%5Cmathbb%7BN%7D%5E%7Bn_%7Bcones%7D%7D%20%5C%5C%5C%5C%20n_%7Bvar%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20variables%7D%20%5C%5C%20n_%7Beq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20equality%20constraints%7D%20%5C%5C%20n_%7Bineq%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20inequality%20constraints%7D%20%5C%5C%20n_%7Bpc%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20positive%20constraints%20%28dimension%20of%20positive%20orthant%29%7D%20%5C%5C%20n_%7Bcones%7D%20%26%20%5Cdots%5Ctext%7BNumber%20of%20second%20order%20cones%20in%20K%7D%20%5C%5C%20%5Cend%7Balign*%7D)
+![symbols](svg/symbols.svg "Symbols Reference")
 
 The last constraint is generalized and includes both the positive orthant and second order cones, so that the top rows of `G` represent the linear constraints
 <!--
@@ -40,7 +40,7 @@ C \in \mathbb{R}^{n_{eq} \times n_{var}} \\
 d \in \mathbb{R}^{n_{eq}} \\
 \end{gathered}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbegin%7Bgathered%7D%20Cx%20%5Cleq%20d%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20C%20%5Cpreceq%20d%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20C%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20d%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Beq%7D%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
+![equation](svg/linear.svg "Linear Constraints")
 
 and the remaining rows contain stacked representations of the second order cones:
 <!--
@@ -57,7 +57,7 @@ w_i \in \mathbb{R} \\
 g_i \in \mathbb{R}^{q_i-1} \\
 \end{gathered}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbegin%7Bgathered%7D%20%5ClVert%20F_ix%20&plus;%20g_i%20%5CrVert%20%5Cleq%20v_i%5ET%20x%20&plus;%20w_i%20%5C%5C%20%5CLeftrightarrow%20%5C%5C%20-%5Cbegin%7Bbmatrix%7D%20v_i%5ET%20%5C%5C%20F_i%20%5Cend%7Bbmatrix%7D%20%5Cpreceq%20%5Cbegin%7Bbmatrix%7D%20w_i%20%5C%5C%20g_i%20%5Cend%7Bbmatrix%7D%20%5C%5C%20i%20%3D%201%2C...%2Cn_%7Bcones%7D%20%5C%5C%20%5Ctext%7Bwith%7D%20%5C%5C%20v_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bn_%7Bvar%7D%7D%20%5C%5C%20F_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%20%5Ctimes%20n_%7Bvar%7D%7D%20%5C%5C%20w_i%20%5Cin%20%5Cmathbb%7BR%7D%20%5C%5C%20g_i%20%5Cin%20%5Cmathbb%7BR%7D%5E%7Bq_i-1%7D%20%5C%5C%20%5Cend%7Bgathered%7D)
+![equation](svg/cones.svg "Cone Constraint")
 
 ### Usage
 ```cpp
