@@ -9,7 +9,7 @@ A C++ Second Order Cone Solver for problems of the form
 &Gx \preceq_K h
 \end{aligend}
 -->
-![equation](/svg/problem.svg?raw=true)
+![equation](svg/problem.svg?raw=true)
 
 <!-- 
 \begin{align*}
