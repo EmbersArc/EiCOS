@@ -9,7 +9,7 @@ A C++ Second Order Cone Solver for problems of the form
 &Gx \preceq_K h
 \end{aligend}
 -->
-![equation](https://latex.codecogs.com/svg.latex?%5Cbegin%7Baligned%7D%20%5Ctext%7Bminimize%7D%20%5C%20%5C%20%26c%5ET%20x%20%5C%5C%20%5Ctext%7Bsubject%20to%7D%20%5C%20%5C%20%26Ax%20%3D%20b%20%5C%5C%20%26Gx%20%5Cpreceq_K%20h%20%5Cend%7Baligend%7D)
+![equation](/svg/problem.svg?raw=true)
 
 <!-- 
 \begin{align*}
