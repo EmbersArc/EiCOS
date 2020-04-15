@@ -3,7 +3,7 @@
                           stroke: black;
                           stroke-width: 2;
                           stroke-opacity: 1;
-                          fill-opacity: 1;
+                          fill-opacity: 0;
                           stroke-linecap: round;
                           stroke-linejoin: miter;
                         }
