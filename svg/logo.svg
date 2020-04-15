@@ -9,25 +9,6 @@
                         }
 
                     text {
-                        fill: black;
-                        }
-                        rect.backdrop{
-                            stroke: none;
-                            fill: white;
-                        }
-                        .broken{
-                            stroke-dasharray: 8;
-                        }
-                        .filled{
-                            fill: black;
-                        }
-                        .bg_filled{
-                            fill: white;
-                        }
-                        .nofill{
-                            fill: white;
-                        }
-
                         text {
                          font-family: monospace;
                          font-size: 14px;
