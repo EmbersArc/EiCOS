@@ -1,0 +1,137 @@
+<svg height="112" width="184" xmlns="http://www.w3.org/2000/svg">
+    <style>line, path, circle,rect,polygon {
+                          stroke: black;
+                          stroke-width: 2;
+                          stroke-opacity: 1;
+                          fill-opacity: 1;
+                          stroke-linecap: round;
+                          stroke-linejoin: miter;
+                        }
+
+                    text {
+                        fill: black;
+                        }
+                        rect.backdrop{
+                            stroke: none;
+                            fill: white;
+                        }
+                        .broken{
+                            stroke-dasharray: 8;
+                        }
+                        .filled{
+                            fill: black;
+                        }
+                        .bg_filled{
+                            fill: white;
+                        }
+                        .nofill{
+                            fill: white;
+                        }
+
+                        text {
+                         font-family: monospace;
+                         font-size: 14px;
+                        }
+
+                        .end_marked_arrow{
+                            marker-end: url(#arrow);
+                         }
+                        .start_marked_arrow{
+                            marker-start: url(#arrow);
+                         }
+
+                        .end_marked_diamond{
+                            marker-end: url(#diamond);
+                         }
+                        .start_marked_diamond{
+                            marker-start: url(#diamond);
+                         }
+
+                        .end_marked_circle{
+                            marker-end: url(#circle);
+                         }
+                        .start_marked_circle{
+                            marker-start: url(#circle);
+                         }
+
+                        .end_marked_open_circle{
+                            marker-end: url(#open_circle);
+                         }
+                        .start_marked_open_circle{
+                            marker-start: url(#open_circle);
+                         }
+
+                        .end_marked_big_open_circle{
+                            marker-end: url(#big_open_circle);
+                         }
+                        .start_marked_big_open_circle{
+                            marker-start: url(#big_open_circle);
+                         }
+
+                         
+                        </style>
+    <defs>
+        <marker id="arrow" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="4" refY="2" viewBox="-2 -2 8 8">
+            <polygon points="0,0 0,4 4,2 0,0"></polygon>
+        </marker>
+        <marker id="diamond" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="4" refY="2" viewBox="-2 -2 8 8">
+            <polygon points="0,2 2,0 4,2 2,4 0,2"></polygon>
+        </marker>
+        <marker id="circle" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="4" refY="4" viewBox="0 0 8 8">
+            <circle class="filled" cx="4" cy="4" r="2"></circle>
+        </marker>
+        <marker id="open_circle" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="4" refY="4" viewBox="0 0 8 8">
+            <circle class="bg_filled" cx="4" cy="4" r="2"></circle>
+        </marker>
+        <marker id="big_open_circle" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="4" refY="4" viewBox="0 0 8 8">
+            <circle class="bg_filled" cx="4" cy="4" r="3"></circle>
+        </marker>
+    </defs>
+    <rect class="backdrop" height="112" width="184" x="0" y="0"></rect>
+    <g>
+        <line class="solid" x1="0" x2="24" y1="0" y2="48"></line>
+        <line class="solid" x1="4" x2="172" y1="8" y2="8"></line>
+        <line class="solid" x1="176" x2="152" y1="0" y2="48"></line>
+        <line class="solid" x1="24" x2="0" y1="48" y2="96"></line>
+        <path class="nofill" d="M 144,24 A 3,3 0,0,0 142,28"></path>
+        <line class="solid" x1="142" x2="160" y1="28" y2="64"></line>
+        <line class="solid" x1="144" x2="164" y1="24" y2="24"></line>
+        <line class="solid" x1="160" x2="176" y1="64" y2="96"></line>
+        <line class="solid" x1="4" x2="172" y1="88" y2="88"></line>
+    </g>
+    <g>
+        <line class="solid" x1="64" x2="40" y1="0" y2="48"></line>
+        <path class="nofill" d="M 32,24 A 3,3 0,0,0 30,28"></path>
+        <line class="solid" x1="30" x2="48" y1="28" y2="64"></line>
+        <line class="solid" x1="32" x2="68" y1="24" y2="24"></line>
+        <line class="solid" x1="40" x2="30" y1="48" y2="68"></line>
+        <path class="nofill" d="M 30,68 A 3,3 0,0,0 32,72"></path>
+        <line class="solid" x1="32" x2="52" y1="72" y2="72"></line>
+        <line class="solid" x1="48" x2="64" y1="64" y2="96"></line>
+        <line class="solid" x1="80" x2="56" y1="0" y2="48"></line>
+        <line class="solid" x1="56" x2="80" y1="48" y2="96"></line>
+    </g>
+    <g>
+        <line class="solid" x1="112" x2="136" y1="0" y2="48"></line>
+        <line class="solid" x1="136" x2="112" y1="48" y2="96"></line>
+        <line class="solid" x1="136" x2="146" y1="48" y2="68"></line>
+        <line class="solid" x1="124" x2="144" y1="72" y2="72"></line>
+        <path class="nofill" d="M 146,68 A 3,3 0,0,1 144,72"></path>
+    </g>
+    <g>
+        <path class="nofill" d="M 88,24 A 8,8 0,0,0 82,28"></path>
+        <line class="solid" x1="82" x2="72" y1="28" y2="48"></line>
+        <line class="solid" x1="88" x2="100" y1="24" y2="24"></line>
+        <line class="solid" x1="104" x2="88" y1="16" y2="48"></line>
+        <line class="solid" x1="72" x2="82" y1="48" y2="68"></line>
+        <line class="solid" x1="88" x2="104" y1="48" y2="80"></line>
+        <path class="nofill" d="M 82,68 A 8,8 0,0,0 88,72"></path>
+        <line class="solid" x1="88" x2="100" y1="72" y2="72"></line>
+    </g>
+    <g>
+        <line class="solid" x1="112" x2="104" y1="32" y2="48"></line>
+        <line class="solid" x1="112" x2="120" y1="32" y2="48"></line>
+        <line class="solid" x1="104" x2="112" y1="48" y2="64"></line>
+        <line class="solid" x1="120" x2="112" y1="48" y2="64"></line>
+    </g>
+</svg>
