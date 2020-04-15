@@ -87,7 +87,6 @@
             <circle class="bg_filled" cx="4" cy="4" r="3"></circle>
         </marker>
     </defs>
-    <rect class="backdrop" height="112" width="184" x="0" y="0"></rect>
     <g>
         <line class="solid" x1="0" x2="24" y1="0" y2="48"></line>
         <line class="solid" x1="4" x2="172" y1="8" y2="8"></line>
