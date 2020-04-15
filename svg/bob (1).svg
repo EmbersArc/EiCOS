@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   height="128"
+   width="192"
+   version="1.1"
+   id="svg135"
+   sodipodi:docname="bob (1).svg"
+   inkscape:version="0.92.4 (5da689c313, 2019-01-14)">
+  <metadata
+     id="metadata139">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="640"
+     inkscape:window-height="480"
+     id="namedview137"
+     showgrid="false"
+     inkscape:zoom="1.84375"
+     inkscape:cx="96"
+     inkscape:cy="64"
+     inkscape:window-x="1208"
+     inkscape:window-y="250"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg135" />
+  <style
+     id="style2">line, path, circle,rect,polygon {
+                          stroke: black;
+                          stroke-width: 2;
+                          stroke-opacity: 1;
+                          fill-opacity: 1;
+                          stroke-linecap: round;
+                          stroke-linejoin: miter;
+                        }
+
+                    text {
+                        fill: black;
+                        }
+                        rect.backdrop{
+                            stroke: none;
+                            fill: white;
+                        }
+                        .broken{
+                            stroke-dasharray: 8;
+                        }
+                        .filled{
+                            fill: black;
+                        }
+                        .bg_filled{
+                            fill: white;
+                        }
+                        .nofill{
+                            fill: white;
+                        }
+
+                        text {
+                         font-family: monospace;
+                         font-size: 14px;
+                        }
+
+                        .end_marked_arrow{
+                            marker-end: url(#arrow);
+                         }
+                        .start_marked_arrow{
+                            marker-start: url(#arrow);
+                         }
+
+                        .end_marked_diamond{
+                            marker-end: url(#diamond);
+                         }
+                        .start_marked_diamond{
+                            marker-start: url(#diamond);
+                         }
+
+                        .end_marked_circle{
+                            marker-end: url(#circle);
+                         }
+                        .start_marked_circle{
+                            marker-start: url(#circle);
+                         }
+
+                        .end_marked_open_circle{
+                            marker-end: url(#open_circle);
+                         }
+                        .start_marked_open_circle{
+                            marker-start: url(#open_circle);
+                         }
+
+                        .end_marked_big_open_circle{
+                            marker-end: url(#big_open_circle);
+                         }
+                        .start_marked_big_open_circle{
+                            marker-start: url(#big_open_circle);
+                         }
+
+                         
+                        </style>
+  <defs
+     id="defs19">
+    <marker
+       id="arrow"
+       markerHeight="7"
+       markerWidth="7"
+       orient="auto-start-reverse"
+       refX="4"
+       refY="2"
+       viewBox="-2 -2 8 8">
+      <polygon
+         points="0,0 0,4 4,2 0,0"
+         id="polygon4" />
+    </marker>
+    <marker
+       id="diamond"
+       markerHeight="7"
+       markerWidth="7"
+       orient="auto-start-reverse"
+       refX="4"
+       refY="2"
+       viewBox="-2 -2 8 8">
+      <polygon
+         points="0,2 2,0 4,2 2,4 0,2"
+         id="polygon7" />
+    </marker>
+    <marker
+       id="circle"
+       markerHeight="7"
+       markerWidth="7"
+       orient="auto-start-reverse"
+       refX="4"
+       refY="4"
+       viewBox="0 0 8 8">
+      <circle
+         class="filled"
+         cx="4"
+         cy="4"
+         r="2"
+         id="circle10" />
+    </marker>
+    <marker
+       id="open_circle"
+       markerHeight="7"
+       markerWidth="7"
+       orient="auto-start-reverse"
+       refX="4"
+       refY="4"
+       viewBox="0 0 8 8">
+      <circle
+         class="bg_filled"
+         cx="4"
+         cy="4"
+         r="2"
+         id="circle13" />
+    </marker>
+    <marker
+       id="big_open_circle"
+       markerHeight="7"
+       markerWidth="7"
+       orient="auto-start-reverse"
+       refX="4"
+       refY="4"
+       viewBox="0 0 8 8">
+      <circle
+         class="bg_filled"
+         cx="4"
+         cy="4"
+         r="3"
+         id="circle16" />
+    </marker>
+  </defs>
+  <g
+     id="g93">
+    <path
+       class="nofill"
+       d="M 16,24 A 3,3 0,0,0 14,28"
+       id="path23" />
+    <line
+       class="solid"
+       x1="14"
+       x2="32"
+       y1="28"
+       y2="64"
+       id="line25" />
+    <line
+       class="solid"
+       x1="16"
+       x2="64"
+       y1="24"
+       y2="24"
+       id="line27" />
+    <path
+       class="nofill"
+       d="M 64,24 A 3,3 0,0,1 66,28"
+       id="path29" />
+    <path
+       class="nofill"
+       d="M 72,24 A 8,8 0,0,0 66,28"
+       id="path31" />
+    <line
+       class="solid"
+       x1="66"
+       x2="48"
+       y1="28"
+       y2="64"
+       id="line33" />
+    <line
+       class="solid"
+       x1="72"
+       x2="80"
+       y1="24"
+       y2="24"
+       id="line35" />
+    <path
+       class="nofill"
+       d="M 80,24 A 3,3 0,0,1 82,28"
+       id="path37" />
+    <path
+       class="nofill"
+       d="M 88,24 A 8,8 0,0,0 82,28"
+       id="path39" />
+    <line
+       class="solid"
+       x1="82"
+       x2="64"
+       y1="28"
+       y2="64"
+       id="line41" />
+    <line
+       class="solid"
+       x1="88"
+       x2="176"
+       y1="24"
+       y2="24"
+       id="line43" />
+    <path
+       class="nofill"
+       d="M 176,24 A 3,3 0,0,1 178,28"
+       id="path45" />
+    <line
+       class="solid"
+       x1="178"
+       x2="160"
+       y1="28"
+       y2="64"
+       id="line47" />
+    <line
+       class="solid"
+       x1="32"
+       x2="14"
+       y1="64"
+       y2="100"
+       id="line49" />
+    <line
+       class="solid"
+       x1="64"
+       x2="82"
+       y1="64"
+       y2="100"
+       id="line51" />
+    <path
+       class="nofill"
+       d="M 14,100 A 3,3 0,0,0 16,104"
+       id="path53" />
+    <line
+       class="solid"
+       x1="16"
+       x2="64"
+       y1="104"
+       y2="104"
+       id="line55" />
+    <path
+       class="nofill"
+       d="M 40,40 A 3,3 0,0,0 38,44"
+       id="path57" />
+    <line
+       class="solid"
+       x1="38"
+       x2="56"
+       y1="44"
+       y2="80"
+       id="line59" />
+    <line
+       class="solid"
+       x1="40"
+       x2="76"
+       y1="40"
+       y2="40"
+       id="line61" />
+    <line
+       class="solid"
+       x1="48"
+       x2="38"
+       y1="64"
+       y2="84"
+       id="line63" />
+    <path
+       class="nofill"
+       d="M 38,84 A 3,3 0,0,0 40,88"
+       id="path65" />
+    <line
+       class="solid"
+       x1="40"
+       x2="60"
+       y1="88"
+       y2="88"
+       id="line67" />
+    <line
+       class="solid"
+       x1="56"
+       x2="66"
+       y1="80"
+       y2="100"
+       id="line69" />
+    <path
+       class="nofill"
+       d="M 66,100 A 3,3 0,0,1 64,104"
+       id="path71" />
+    <path
+       class="nofill"
+       d="M 66,100 A 8,8 0,0,0 72,104"
+       id="path73" />
+    <line
+       class="solid"
+       x1="72"
+       x2="80"
+       y1="104"
+       y2="104"
+       id="line75" />
+    <path
+       class="nofill"
+       d="M 82,100 A 3,3 0,0,1 80,104"
+       id="path77" />
+    <path
+       class="nofill"
+       d="M 82,100 A 8,8 0,0,0 88,104"
+       id="path79" />
+    <line
+       class="solid"
+       x1="88"
+       x2="176"
+       y1="104"
+       y2="104"
+       id="line81" />
+    <path
+       class="nofill"
+       d="M 152,40 A 3,3 0,0,0 150,44"
+       id="path83" />
+    <line
+       class="solid"
+       x1="150"
+       x2="168"
+       y1="44"
+       y2="80"
+       id="line85" />
+    <line
+       class="solid"
+       x1="152"
+       x2="172"
+       y1="40"
+       y2="40"
+       id="line87" />
+    <line
+       class="solid"
+       x1="168"
+       x2="178"
+       y1="80"
+       y2="100"
+       id="line89" />
+    <path
+       class="nofill"
+       d="M 178,100 A 3,3 0,0,1 176,104"
+       id="path91" />
+  </g>
+  <g
+     id="g111">
+    <path
+       class="nofill"
+       d="M 96,40 A 8,8 0,0,0 90,44"
+       id="path95" />
+    <line
+       class="solid"
+       x1="90"
+       x2="80"
+       y1="44"
+       y2="64"
+       id="line97" />
+    <line
+       class="solid"
+       x1="96"
+       x2="108"
+       y1="40"
+       y2="40"
+       id="line99" />
+    <line
+       class="solid"
+       x1="112"
+       x2="96"
+       y1="32"
+       y2="64"
+       id="line101" />
+    <line
+       class="solid"
+       x1="80"
+       x2="90"
+       y1="64"
+       y2="84"
+       id="line103" />
+    <line
+       class="solid"
+       x1="96"
+       x2="112"
+       y1="64"
+       y2="96"
+       id="line105" />
+    <path
+       class="nofill"
+       d="M 90,84 A 8,8 0,0,0 96,88"
+       id="path107" />
+    <line
+       class="solid"
+       x1="96"
+       x2="108"
+       y1="88"
+       y2="88"
+       id="line109" />
+  </g>
+  <g
+     id="g123">
+    <line
+       class="solid"
+       x1="128"
+       x2="152"
+       y1="32"
+       y2="80"
+       id="line113" />
+    <line
+       class="solid"
+       x1="144"
+       x2="128"
+       y1="64"
+       y2="96"
+       id="line115" />
+    <line
+       class="solid"
+       x1="132"
+       x2="152"
+       y1="88"
+       y2="88"
+       id="line117" />
+    <line
+       class="solid"
+       x1="152"
+       x2="154"
+       y1="80"
+       y2="84"
+       id="line119" />
+    <path
+       class="nofill"
+       d="M 154,84 A 3,3 0,0,1 152,88"
+       id="path121" />
+  </g>
+  <g
+     id="g133">
+    <line
+       class="solid"
+       x1="120"
+       x2="112"
+       y1="48"
+       y2="64"
+       id="line125" />
+    <line
+       class="solid"
+       x1="120"
+       x2="128"
+       y1="48"
+       y2="64"
+       id="line127" />
+    <line
+       class="solid"
+       x1="112"
+       x2="120"
+       y1="64"
+       y2="80"
+       id="line129" />
+    <line
+       class="solid"
+       x1="128"
+       x2="120"
+       y1="64"
+       y2="80"
+       id="line131" />
+  </g>
+</svg>
