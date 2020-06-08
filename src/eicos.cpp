@@ -2025,10 +2025,9 @@ void Solver::updateData(const Eigen::SparseMatrix<double> &G,
                         const Eigen::VectorXd &h,
                         const Eigen::VectorXd &b)
 {
-    for (int i = 0; i < G.nonZeros(); i++)
-        this->G.valuePtr()[i] = G.valuePtr()[i];
-    for (int i = 0; i < A.nonZeros(); i++)
-        this->A.valuePtr()[i] = A.valuePtr()[i];
+    std::copy(G.valuePtr(), G.valuePtr() + G.nonZeros(), this->G.valuePtr());
+    std::copy(A.valuePtr(), A.valuePtr() + A.nonZeros(), this->A.valuePtr());
+
     this->c = c;
     this->h = h;
     this->b = b;
