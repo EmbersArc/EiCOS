@@ -139,7 +139,7 @@ void Solver::build(const Eigen::SparseMatrix<double> &G,
     {
         assert(A.cols() == G.cols());
     }
-    n_var = std::max(A.cols(), G.cols());
+    n_var = c.size();
     n_eq = A.rows();
     n_ineq = G.rows();
     n_lc = n_ineq - soc_dims.sum();
