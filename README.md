@@ -99,7 +99,7 @@ solver.solve()
 ### CMake
 To use the solver with a cmake project, simply include the subdirectory and link the library.
 ```
-add_subdirectory(solvers/EiCOS)
+add_subdirectory(EiCOS)
 target_link_libraries(my_library eicos)
 ```
 
