@@ -96,6 +96,13 @@ solver.solve()
 * `Eigen` for linear algebra functionality
 * `fmt` (optional) for printing and formatting
 
+### CMake
+To use the solver with a cmake project, simply include the subdirectory and link the library.
+```
+add_subdirectory(solvers/EiCOS)
+target_link_libraries(my_library eicos)
+```
+
 ### Credits
 This solver is entirely based on [ECOS](https://github.com/embotech/ecos).
 
