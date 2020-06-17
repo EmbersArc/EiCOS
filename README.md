@@ -34,7 +34,7 @@ n_{cones} & \dots\text{Number of second order cones in K} \\
 The last constraint is generalized and includes both the positive orthant and second order cones, so that the top rows of `G` represent the linear constraints
 <!--
 \begin{gathered}
-Cx \leq d \\
+0 \leq Cx + d \\
 \Leftrightarrow \\
 C \preceq d \\
 \text{with} \\
