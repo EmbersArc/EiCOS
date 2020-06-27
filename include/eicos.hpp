@@ -159,6 +159,9 @@ public:
 
     const Eigen::VectorXd &solution() const;
 
+    Settings &getSettings();
+    Information &getInfo();
+
     // void saveProblemData(const std::string &path = "problem_data.hpp");
 
 private:

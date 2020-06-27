@@ -119,6 +119,16 @@ Solver::Solver(int n, int m, int p, int /* l */, int ncones, int *q,
     build(G_, A_, c_, h_, b_, q_);
 }
 
+
+Settings &Solver::getSettings(){
+    return settings;
+}
+
+Information &Solver::getInfo(){
+    return w.i;
+}
+
+
 void Solver::build(const Eigen::SparseMatrix<double> &G,
                    const Eigen::SparseMatrix<double> &A,
                    const Eigen::VectorXd &c,
