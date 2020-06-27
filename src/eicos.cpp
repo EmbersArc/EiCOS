@@ -124,7 +124,7 @@ namespace EiCOS
         return settings;
     }
 
-    Information &Solver::getInfo()
+    const Information &Solver::getInfo() const
     {
         return w.i;
     }

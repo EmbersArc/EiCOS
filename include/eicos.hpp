@@ -160,7 +160,7 @@ namespace EiCOS
         const Eigen::VectorXd &solution() const;
 
         Settings &getSettings();
-        Information &getInfo();
+        const Information &getInfo() const;
 
         // void saveProblemData(const std::string &path = "problem_data.hpp");
 
