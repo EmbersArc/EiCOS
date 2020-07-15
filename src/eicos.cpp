@@ -17,9 +17,9 @@ namespace EiCOS
     }
 
     /**
- * Compares stats of two iterates with each other.
- * Returns true if this is better than other, false otherwise.
- */
+     * Compares stats of two iterates with each other.
+     * Returns true if this is better than other, false otherwise.
+     */
     bool Information::isBetterThan(Information &other) const
     {
         if (pinfres.has_value() and kapovert > 1.)
@@ -404,10 +404,10 @@ namespace EiCOS
     }
 
     /**
- * Update scalings.
- * Returns false as soon as any multiplier or slack leaves the cone,
- * as this indicates severe problems.
- */
+     * Update scalings.
+     * Returns false as soon as any multiplier or slack leaves the cone,
+     * as this indicates severe problems.
+     */
     bool Solver::updateScalings(const Eigen::VectorXd &s,
                                 const Eigen::VectorXd &z,
                                 Eigen::VectorXd &lambda)
@@ -479,9 +479,9 @@ namespace EiCOS
     }
 
     /**
- * Fast multiplication by scaling matrix.
- * Returns lambda = W * z
- */
+     * Fast multiplication by scaling matrix.
+     * Returns lambda = W * z
+     */
     void Solver::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
     {
         /* LP cone */
@@ -507,22 +507,22 @@ namespace EiCOS
     }
 
     /**
- * This function is reponsible for checking the exit/convergence conditions.
- * If one of the exit conditions is met, The solver displays an exit message and returns
- * the corresponding exit code. The calling function must then make sure that the solver
- * is indeed correctly exited, so a call to this function should always be followed
- * by a break statement.
- *
- * In reduced accuracy mode, reduced precisions are checked, and the exit display is augmented
- *               by "Close to". The exitcodes returned are increased by the value
- *               of mode.
- *
- * The primal and dual infeasibility flags pinf and dinf are raised
- * according to the outcome of the test.
- *
- * If none of the exit tests are met, the function returns not_converged_yet.
- * This should not be an exitflag that is ever returned to the outside world.
- */
+     * This function is reponsible for checking the exit/convergence conditions.
+     * If one of the exit conditions is met, The solver displays an exit message and returns
+     * the corresponding exit code. The calling function must then make sure that the solver
+     * is indeed correctly exited, so a call to this function should always be followed
+     * by a break statement.
+     *
+     * In reduced accuracy mode, reduced precisions are checked, and the exit display is augmented
+     *               by "Close to". The exitcodes returned are increased by the value
+     *               of mode.
+     *
+     * The primal and dual infeasibility flags pinf and dinf are raised
+     * according to the outcome of the test.
+     *
+     * If none of the exit tests are met, the function returns not_converged_yet.
+     * This should not be an exitflag that is ever returned to the outside world.
+     */
     exitcode Solver::checkExitConditions(bool reduced_accuracy)
     {
         double feastol;
@@ -643,12 +643,12 @@ namespace EiCOS
     void Solver::computeResiduals()
     {
         /**
-    * hrx = -A' * y - G' * z       rx = hrx - tau * c      hresx = ||rx||_2
-    * hry =  A * x                 ry = hry - tau * b      hresy = ||ry||_2
-    * hrz =  s + G * x             rz = hrz - tau * h      hresz = ||rz||_2
-    * 
-    * rt = kappa + c' * x + b' * y + h' * z
-    */
+         * hrx = -A' * y - G' * z       rx = hrx - tau * c      hresx = ||rx||_2
+         * hry =  A * x                 ry = hry - tau * b      hresy = ||ry||_2
+         * hrz =  s + G * x             rz = hrz - tau * h      hresz = ||rz||_2
+         * 
+         * rt = kappa + c' * x + b' * y + h' * z
+         */
 
         /* rx = -A' * y - G' * z - tau * c */
         rx = -Gt * w.z;
@@ -754,10 +754,10 @@ namespace EiCOS
     }
 
     /**
- * Scales a conic variable such that it lies strictly in the cone.
- * If it is already in the cone, r is simply copied to s.
- * Otherwise s = r + (1 + alpha) * e where alpha is the biggest residual.
- */
+     * Scales a conic variable such that it lies strictly in the cone.
+     * If it is already in the cone, r is simply copied to s.
+     * Otherwise s = r + (1 + alpha) * e where alpha is the biggest residual.
+     */
     void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
     {
         double alpha = -settings.gamma;
@@ -855,13 +855,13 @@ namespace EiCOS
         resetKKTScalings();
 
         /**
-    * Set up first right hand side
-    * 
-    *   [ 0 ]
-    *   [ b ]
-    *   [ h ]
-    * 
-    */
+         * Set up first right hand side
+         * 
+         *   [ 0 ]
+         *   [ b ]
+         *   [ h ]
+         * 
+         */
         rhs1.setZero();
         rhs1.segment(n_var, n_eq) = b;
         rhs1.segment(n_var + n_eq, n_lc) = h.head(n_lc);
@@ -875,13 +875,13 @@ namespace EiCOS
         }
 
         /**
-    * Set up second right hand side
-    * 
-    *   [-c ]
-    *   [ 0 ]
-    *   [ 0 ]
-    * 
-    */
+         * Set up second right hand side
+         * 
+         *   [-c ]
+         *   [ 0 ]
+         *   [ 0 ]
+         * 
+         */
         rhs2.setZero();
         rhs2.head(n_var) = -c;
 
@@ -905,25 +905,25 @@ namespace EiCOS
         }
 
         /**
-	 * Primal Variables:
-     * 
-	 *  Solve 
-     * 
-     *  xhat = arg min ||Gx - h||_2^2  such that A * x = b
-	 *  r = h - G * xhat
-     * 
-	 * Equivalent to
-	 *
-	 * [ 0   A'  G' ] [ xhat ]     [ 0 ]
-     * [ A   0   0  ] [  y   ]  =  [ b ]
-     * [ G   0  -I  ] [ -r   ]     [ h ]
-     *
-     *        (  r                       if alphap < 0
-     * shat = < 
-     *        (  r + (1 + alphap) * e    otherwise
-     * 
-     * where alphap = inf{ alpha | r + alpha * e >= 0 }
-	 */
+         * Primal Variables:
+         * 
+         *  Solve 
+         * 
+         *  xhat = arg min ||Gx - h||_2^2  such that A * x = b
+         *  r = h - G * xhat
+         * 
+         * Equivalent to
+         *
+         * [ 0   A'  G' ] [ xhat ]     [ 0 ]
+         * [ A   0   0  ] [  y   ]  =  [ b ]
+         * [ G   0  -I  ] [ -r   ]     [ h ]
+         *
+         *        (  r                       if alphap < 0
+         * shat = < 
+         *        (  r + (1 + alphap) * e    otherwise
+         * 
+         * where alphap = inf{ alpha | r + alpha * e >= 0 }
+         */
 
         /* Solve for RHS [0; b; h] */
         Eigen::VectorXd dx1(n_var);
@@ -939,24 +939,24 @@ namespace EiCOS
         bringToCone(-dz1, w.s);
 
         /**
-	 * Dual Variables:
-     * 
-	 * Solve 
-     * 
-     * (yhat, zbar) = arg min ||z||_2^2 such that G'*z + A'*y + c = 0
-	 *
-	 * Equivalent to
-	 *
-	 * [ 0   A'  G' ] [  x   ]     [ -c ]
-	 * [ A   0   0  ] [ yhat ]  =  [  0 ]
-	 * [ G   0  -I  ] [ zbar ]     [  0 ]
-	 *     
-     *        (  zbar                       if alphad < 0
-     * zhat = < 
-     *        (  zbar + (1 + alphad) * e    otherwise
-     * 
-	 * where alphad = inf{ alpha | zbar + alpha * e >= 0 }
-	 */
+         * Dual Variables:
+         * 
+         * Solve 
+         * 
+         * (yhat, zbar) = arg min ||z||_2^2 such that G'*z + A'*y + c = 0
+         *
+         * Equivalent to
+         *
+         * [ 0   A'  G' ] [  x   ]     [ -c ]
+         * [ A   0   0  ] [ yhat ]  =  [  0 ]
+         * [ G   0  -I  ] [ zbar ]     [  0 ]
+         *     
+         *        (  zbar                       if alphad < 0
+         * zhat = < 
+         *        (  zbar + (1 + alphad) * e    otherwise
+         * 
+         * where alphad = inf{ alpha | zbar + alpha * e >= 0 }
+         */
 
         /* Solve for RHS [-c; 0; 0] */
         Eigen::VectorXd dx2(n_var);
@@ -972,11 +972,11 @@ namespace EiCOS
         bringToCone(dz2, w.z);
 
         /**
-    * Modify first right hand side
-    * [ 0 ]    [-c ] 
-    * [ b ] -> [ b ] 
-    * [ h ]    [ h ] 
-    */
+         * Modify first right hand side
+         * [ 0 ]    [-c ] 
+         * [ b ] -> [ b ] 
+         * [ h ]    [ h ] 
+         */
         rhs1.head(n_var) = -c;
 
         /* Other variables */
@@ -999,14 +999,14 @@ namespace EiCOS
             updateStatistics();
 
             /**
-         *  SAFEGUARD: Backtrack to best previously seen iterate if
-         *
-         * - the update was bad such that the primal residual PRES has increased by a factor of SAFEGUARD, or
-         * - the gap became negative
-         *
-         * If the safeguard is activated, the solver tests if reduced precision has been reached, and reports
-         * accordingly. If not even reduced precision is reached, return the flag numerics.
-         */
+             *  SAFEGUARD: Backtrack to best previously seen iterate if
+             *
+             * - the update was bad such that the primal residual PRES has increased by a factor of SAFEGUARD, or
+             * - the gap became negative
+             *
+             * If the safeguard is activated, the solver tests if reduced precision has been reached, and reports
+             * accordingly. If not even reduced precision is reached, return the flag numerics.
+             */
             if (w.i.iter > 0 and
                 (w.i.pres > settings.safeguard * pres_prev or w.i.gap < 0.))
             {
@@ -1048,11 +1048,11 @@ namespace EiCOS
             if (code == exitcode::not_converged_yet)
             {
                 /**
-             * Full precision has not been reached yet. Check for two more cases of exit:
-             *  (i) min step size, in which case we assume we won't make progress any more, and
-             * (ii) maximum number of iterations reached
-             * If these two are not fulfilled, another iteration will be made.
-             */
+                 * Full precision has not been reached yet. Check for two more cases of exit:
+                 *  (i) min step size, in which case we assume we won't make progress any more, and
+                 * (ii) maximum number of iterations reached
+                 * If these two are not fulfilled, another iteration will be made.
+                 */
 
                 /* Did the line search cock up? (zero step length) */
                 if (w.i.iter > 0 and w.i.step == settings.stepmin * settings.gamma)
@@ -1143,10 +1143,10 @@ namespace EiCOS
             }
 
             /**
-         * SAFEGUARD:
-         * Check whether current iterate is worth keeping as the best solution so far,
-         * before doing another iteration
-         */
+             * SAFEGUARD:
+             * Check whether current iterate is worth keeping as the best solution so far,
+             * before doing another iteration
+             */
             if (w.i.iter == 0)
             {
                 /* We're at the first iterate, so there's nothing to compare yet */
@@ -1218,10 +1218,10 @@ namespace EiCOS
             const double dtau = ((1. - sigma) * rt - bkap / w.tau + c.dot(dx2) + b.dot(dy2) + h.dot(dz2)) / dtau_denom;
 
             /**
-         * dx = x2 + dtau * x1
-         * dy = y2 + dtau * y1
-         * dz = z2 + dtau * z1
-         */
+             * dx = x2 + dtau * x1
+             * dy = y2 + dtau * y1
+             * dz = z2 + dtau * z1
+             */
             dx2 += dtau * dx1;
             dy2 += dtau * dy1;
             dz2 += dtau * dz1;
@@ -1262,12 +1262,12 @@ namespace EiCOS
     }
 
     /**
- * Scales variables by 1.0/tau, i.e. computes
- * x = x / tau
- * y = y / tau
- * z = z / tau
- * s = s / tau
- */
+     * Scales variables by 1.0/tau, i.e. computes
+     * x = x / tau
+     * y = y / tau
+     * z = z / tau
+     * s = s / tau
+     */
     void Solver::backscale()
     {
         w.x = w.x.cwiseQuotient(x_equil * w.tau);
@@ -1277,8 +1277,8 @@ namespace EiCOS
     }
 
     /**
- * Prepares the RHS for computing the combined search direction.
- */
+     * Prepares the RHS for computing the combined search direction.
+     */
     void Solver::RHScombined()
     {
         Eigen::VectorXd ds1(n_ineq);
@@ -1325,8 +1325,8 @@ namespace EiCOS
     }
 
     /**
- * Conic division, implements the "\" operator, v = u \ w
- */
+     * Conic division, implements the "\" operator, v = u \ w
+     */
     void Solver::conicDivision(const Eigen::VectorXd &u,
                                const Eigen::VectorXd &w,
                                Eigen::VectorXd &v)
@@ -1351,9 +1351,9 @@ namespace EiCOS
     }
 
     /**
- * Conic product, implements the "o" operator, w = u o v
- * and returns e' * w (where e is the conic 1-vector)
- */
+     * Conic product, implements the "o" operator, w = u o v
+     * and returns e' * w (where e is the conic 1-vector)
+     */
     double Solver::conicProduct(const Eigen::VectorXd &u,
                                 const Eigen::VectorXd &v,
                                 Eigen::VectorXd &w)
@@ -1620,12 +1620,12 @@ namespace EiCOS
     }
 
     /**
- *                                            [ D   v   u  ]
- * Fast multiplication with V = W^2 = eta^2 * [ v'  1   0  ] 
- *                                            [ u'  0  -1  ]
- * Computes y += W^2 * x;
- * 
- */
+     *                                            [ D   v   u  ]
+     * Fast multiplication with V = W^2 = eta^2 * [ v'  1   0  ] 
+     *                                            [ u'  0  -1  ]
+     * Computes y += W^2 * x;
+     * 
+     */
     void Solver::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
     {
         /* LP cone */
@@ -1662,11 +1662,11 @@ namespace EiCOS
     }
 
     /**
- * Prepares the affine RHS for KKT system.
- * Given the special way we store the KKT matrix (sparse representation
- * of the scalings for the second-order cone), we need this to prepare
- * the RHS before solving the KKT system in the special format.
- */
+     * Prepares the affine RHS for KKT system.
+     * Given the special way we store the KKT matrix (sparse representation
+     * of the scalings for the second-order cone), we need this to prepare
+     * the RHS before solving the KKT system in the special format.
+     */
     void Solver::RHSaffine()
     {
         /* LP cone */
@@ -1734,16 +1734,16 @@ namespace EiCOS
     void Solver::setupKKT()
     {
         /**
-     *      [ 0  A' G']
-     *  K = [ A  0  0 ]
-     *      [ G  0 -V ]
-     * 
-     *   V = blkdiag(I, blkdiag(I, 1, -1), ...,  blkdiag(I, 1, -1));
-     *                    ^   number of second-order cones   ^
-     *               ^ dimension of linear contraints
-     * 
-     *  Only the upper triangular part is constructed here.
-     */
+         *      [ 0  A' G']
+         *  K = [ A  0  0 ]
+         *      [ G  0 -V ]
+         * 
+         *   V = blkdiag(I, blkdiag(I, 1, -1), ...,  blkdiag(I, 1, -1));
+         *                    ^   number of second-order cones   ^
+         *               ^ dimension of linear contraints
+         * 
+         *  Only the upper triangular part is constructed here.
+         */
         K.resize(dim_K, dim_K);
 
         /* Number of non-zeros in KKT matrix */
@@ -1831,20 +1831,20 @@ namespace EiCOS
 
             /* SOC blocks */
             /**
-         * The scaling matrix has the following structure:
-         *
-         *    [ 1                * ]
-         *    [   1           *  * ]
-         *    [     .         *  * ]      
-         *    [       .       *  * ]       [ D   v   u ]      D: Identity of size conesize       
-         *  - [         .     *  * ]  =  - [ u'  1   0 ]      v: Vector of size conesize - 1      
-         *    [           1   *  * ]       [ v'  0' -1 ]      u: Vector of size conesize    
-         *    [             1 *  * ]
-         *    [   * * * * * * 1    ]
-         *    [ * * * * * * *   -1 ]
-         *
-         *  Only the upper triangular part is constructed here.
-         */
+             * The scaling matrix has the following structure:
+             *
+             *    [ 1                * ]
+             *    [   1           *  * ]
+             *    [     .         *  * ]      
+             *    [       .       *  * ]       [ D   v   u ]      D: Identity of size conesize       
+             *  - [         .     *  * ]  =  - [ u'  1   0 ]      v: Vector of size conesize - 1      
+             *    [           1   *  * ]       [ v'  0' -1 ]      u: Vector of size conesize    
+             *    [             1 *  * ]
+             *    [   * * * * * * 1    ]
+             *    [ * * * * * * *   -1 ]
+             *
+             *  Only the upper triangular part is constructed here.
+             */
             for (const SOCone &sc : so_cones)
             {
                 /* D */
@@ -1890,8 +1890,8 @@ namespace EiCOS
     }
 
     /**
- * Save pointers for fast access
- */
+     * Save pointers for fast access
+     */
     void Solver::cacheIndices()
     {
         /* A AND G MATRICES */
