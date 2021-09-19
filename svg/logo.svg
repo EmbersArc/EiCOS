@@ -46,7 +46,7 @@
      inkscape:current-layer="svg135" />
   <style
      id="style2">line, path, circle,rect,polygon {
-                          stroke: black;
+                          stroke: gray;
                           stroke-width: 2;
                           stroke-opacity: 1;
                           fill-opacity: 1;
@@ -55,7 +55,7 @@
                         }
 
                     text {
-                        fill: black;
+                        fill: gray;
                         }
                         rect.backdrop{
                             stroke: none;
@@ -65,7 +65,7 @@
                             stroke-dasharray: 8;
                         }
                         .filled{
-                            fill: black;
+                            fill: gray;
                         }
                         .bg_filled{
                             fill: white;
