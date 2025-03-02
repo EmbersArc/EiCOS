@@ -1,6 +1,7 @@
 #pragma once
 
-#include <Eigen/Sparse>
+#include <cuDSS/SparseMatrix>
+#include <cuDSS/Vector>
 
 namespace EiCOS
 {
@@ -74,21 +75,21 @@ namespace EiCOS
 
     struct LPCone
     {
-        Eigen::VectorXd w; // size n_lc
-        Eigen::VectorXd v; // size n_lc
+        cuDSS::Vector w; // size n_lc
+        cuDSS::Vector v; // size n_lc
     };
 
     struct SOCone
     {
         size_t dim;            // dimension of cone
-        Eigen::VectorXd skbar; // temporary variables to work with
-        Eigen::VectorXd zkbar; // temporary variables to work with
+        cuDSS::Vector skbar; // temporary variables to work with
+        cuDSS::Vector zkbar; // temporary variables to work with
         double a;              // = wbar(1)
         double d1;             // first element of D
         double w;              // = q'*q
         double eta;            // eta = (sres / zres)^(1/4)
         double eta_square;     // eta^2 = (sres / zres)^(1/2)
-        Eigen::VectorXd q;     // = wbar(2:end)
+        cuDSS::Vector q;     // = wbar(2:end)
         double u0;             // eta
         double u1;             // u = [u0; u1 * q]
         double v1;             // v = [0; v1 * q]
@@ -97,11 +98,11 @@ namespace EiCOS
     struct Work
     {
         void allocate(size_t n_var, size_t n_eq, size_t n_ineq);
-        Eigen::VectorXd x;      // Primal variables  size n_var
-        Eigen::VectorXd y;      // Multipliers for equality constaints  (size n_eq)
-        Eigen::VectorXd z;      // Multipliers for conic inequalities   (size n_ineq)
-        Eigen::VectorXd s;      // Slacks for conic inequalities        (size n_ineq)
-        Eigen::VectorXd lambda; // Scaled variable                      (size n_ineq)
+        cuDSS::Vector x;      // Primal variables  size n_var
+        cuDSS::Vector y;      // Multipliers for equality constaints  (size n_eq)
+        cuDSS::Vector z;      // Multipliers for conic inequalities   (size n_ineq)
+        cuDSS::Vector s;      // Slacks for conic inequalities        (size n_ineq)
+        cuDSS::Vector lambda; // Scaled variable                      (size n_ineq)
 
         // Homogeneous embedding
         double kap; // kappa
@@ -135,17 +136,17 @@ namespace EiCOS
      */
 
     public:
-        Solver(const Eigen::SparseMatrix<double> &G,
-               const Eigen::SparseMatrix<double> &A,
-               const Eigen::VectorXd &c,
-               const Eigen::VectorXd &h,
-               const Eigen::VectorXd &b,
-               const Eigen::VectorXi &soc_dims);
-        void updateData(const Eigen::SparseMatrix<double> &G,
-                        const Eigen::SparseMatrix<double> &A,
-                        const Eigen::VectorXd &c,
-                        const Eigen::VectorXd &h,
-                        const Eigen::VectorXd &b);
+        Solver(const cuDSS::SparseMatrix &G,
+               const cuDSS::SparseMatrix &A,
+               const cuDSS::Vector &c,
+               const cuDSS::Vector &h,
+               const cuDSS::Vector &b,
+               const cuDSS::VectorInt &soc_dims);
+        void updateData(const cuDSS::SparseMatrix &G,
+                        const cuDSS::SparseMatrix &A,
+                        const cuDSS::Vector &c,
+                        const cuDSS::Vector &h,
+                        const cuDSS::Vector &b);
 
         // traditional interface for compatibility
         Solver(int n, int m, int p, int l, int ncones, int *q,
@@ -157,7 +158,7 @@ namespace EiCOS
 
         exitcode solve(bool verbose = false);
 
-        const Eigen::VectorXd &solution() const;
+        const cuDSS::Vector &solution() const;
 
         Settings &getSettings();
         const Information &getInfo() const;
@@ -165,12 +166,12 @@ namespace EiCOS
         // void saveProblemData(const std::string &path = "problem_data.hpp");
 
     private:
-        void build(const Eigen::SparseMatrix<double> &G,
-                   const Eigen::SparseMatrix<double> &A,
-                   const Eigen::VectorXd &c,
-                   const Eigen::VectorXd &h,
-                   const Eigen::VectorXd &b,
-                   const Eigen::VectorXi &soc_dims);
+        void build(const cuDSS::SparseMatrix &G,
+                   const cuDSS::SparseMatrix &A,
+                   const cuDSS::Vector &c,
+                   const cuDSS::Vector &h,
+                   const cuDSS::Vector &b,
+                   const cuDSS::VectorInt &soc_dims);
 
         Settings settings;
         Work w, w_best;
@@ -185,18 +186,18 @@ namespace EiCOS
         LPCone lp_cone;
         std::vector<SOCone> so_cones;
 
-        Eigen::SparseMatrix<double> G;
-        Eigen::SparseMatrix<double> A;
-        Eigen::SparseMatrix<double> Gt;
-        Eigen::SparseMatrix<double> At;
-        Eigen::VectorXd c;
-        Eigen::VectorXd h;
-        Eigen::VectorXd b;
+        cuDSS::SparseMatrix G;
+        cuDSS::SparseMatrix A;
+        cuDSS::SparseMatrix Gt;
+        cuDSS::SparseMatrix At;
+        cuDSS::Vector c;
+        cuDSS::Vector h;
+        cuDSS::Vector b;
 
         // Residuals
-        Eigen::VectorXd rx; // (size n_var)
-        Eigen::VectorXd ry; // (size n_eq)
-        Eigen::VectorXd rz; // (size n_ineq)
+        cuDSS::Vector rx; // (size n_var)
+        cuDSS::Vector ry; // (size n_eq)
+        cuDSS::Vector rz; // (size n_ineq)
         double hresx, hresy, hresz;
         double rt;
 
@@ -204,21 +205,21 @@ namespace EiCOS
         double nx, ny, nz, ns;
 
         // Equilibration vectors
-        Eigen::VectorXd x_equil; // (size n_var)
-        Eigen::VectorXd A_equil; // (size n_eq)
-        Eigen::VectorXd G_equil; // (size n_ineq)
+        cuDSS::Vector x_equil; // (size n_var)
+        cuDSS::Vector A_equil; // (size n_eq)
+        cuDSS::Vector G_equil; // (size n_ineq)
         bool equibrilated;
 
         // The problem data scaling parameters
         double resx0, resy0, resz0;
 
-        Eigen::VectorXd dsaff_by_W, W_times_dzaff, dsaff;
+        cuDSS::Vector dsaff_by_W, W_times_dzaff, dsaff;
 
         // KKT
-        Eigen::VectorXd rhs1; // The right hand side in the first  KKT equation.
-        Eigen::VectorXd rhs2; // The right hand side in the second KKT equation.
-        Eigen::SparseMatrix<double> K;
-        using LDLT_t = Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Upper>;
+        cuDSS::Vector rhs1; // The right hand side in the first  KKT equation.
+        cuDSS::Vector rhs2; // The right hand side in the second KKT equation.
+        cuDSS::SparseMatrix K;
+        using LDLT_t = cuDSS::LDLT<cuDSS::SparseMatrix, cuDSS::Upper>;
         LDLT_t ldlt;
         std::vector<double *> KKT_V_ptr;  // Pointer to scaling/regularization elements for fast update
         std::vector<double *> KKT_AG_ptr; // Pointer to A/G elements for fast update
@@ -226,38 +227,38 @@ namespace EiCOS
         void resetKKTScalings();
         void updateKKTScalings();
         void updateKKTAG();
-        size_t solveKKT(const Eigen::VectorXd &rhs,
-                        Eigen::VectorXd &dx,
-                        Eigen::VectorXd &dy,
-                        Eigen::VectorXd &dz,
+        size_t solveKKT(const cuDSS::Vector &rhs,
+                        cuDSS::Vector &dx,
+                        cuDSS::Vector &dy,
+                        cuDSS::Vector &dz,
                         bool initialize);
 
         void allocate();
 
-        void bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s);
+        void bringToCone(const cuDSS::Vector &r, cuDSS::Vector &s);
         void computeResiduals();
         void updateStatistics();
         exitcode checkExitConditions(bool reduced_accuracy);
-        bool updateScalings(const Eigen::VectorXd &s,
-                            const Eigen::VectorXd &z,
-                            Eigen::VectorXd &lambda);
+        bool updateScalings(const cuDSS::Vector &s,
+                            const cuDSS::Vector &z,
+                            cuDSS::Vector &lambda);
         void RHSaffine();
         void RHScombined();
-        void scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y);
-        void scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda);
-        double lineSearch(Eigen::VectorXd &lambda,
-                          Eigen::VectorXd &ds,
-                          Eigen::VectorXd &dz,
+        void scale2add(const cuDSS::Vector &x, cuDSS::Vector &y);
+        void scale(const cuDSS::Vector &z, cuDSS::Vector &lambda);
+        double lineSearch(cuDSS::Vector &lambda,
+                          cuDSS::Vector &ds,
+                          cuDSS::Vector &dz,
                           double tau,
                           double dtau,
                           double kap,
                           double dkap);
-        double conicProduct(const Eigen::VectorXd &u,
-                            const Eigen::VectorXd &v,
-                            Eigen::VectorXd &w);
-        void conicDivision(const Eigen::VectorXd &u,
-                           const Eigen::VectorXd &w,
-                           Eigen::VectorXd &v);
+        double conicProduct(const cuDSS::Vector &u,
+                            const cuDSS::Vector &v,
+                            cuDSS::Vector &w);
+        void conicDivision(const cuDSS::Vector &u,
+                           const cuDSS::Vector &w,
+                           cuDSS::Vector &v);
         void backscale();
         void setEquilibration();
         void unsetEquilibration();

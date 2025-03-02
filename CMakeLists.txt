@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.5)
 project(eicos)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(fmt QUIET)
+find_package(cuDSS 0.5.0 REQUIRED)
 
 set(EICOS_INCLUDE
     include
@@ -25,6 +26,7 @@ target_compile_options(eicos PUBLIC "$<$<CONFIG:DEBUG>:${DEBUG_OPTIONS}>")
 target_compile_options(eicos PUBLIC "$<$<CONFIG:RELEASE>:${RELEASE_OPTIONS}>")
 
 target_link_libraries(eicos Eigen3::Eigen)
+target_link_libraries(eicos cuDSS::cuDSS)
 
 IF (${fmt_FOUND})
    MESSAGE(STATUS "Found fmt.")

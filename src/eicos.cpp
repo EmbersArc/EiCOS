@@ -1,7 +1,7 @@
 #include "eicos.hpp"
 
 #include <chrono>
-#include <Eigen/SparseCholesky>
+#include <cuDSS/SparseCholesky>
 #include "printing.hpp"
 
 namespace EiCOS
@@ -67,23 +67,23 @@ namespace EiCOS
         }
     }
 
-    void printSparseMatrix(const Eigen::SparseMatrix<double> &m)
+    void printSparseMatrix(const cuDSS::SparseMatrix<double> &m)
     {
         for (int j = 0; j < m.outerSize(); j++)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
             {
                 print("({:3},{:3}) = {}\n", it.row() + 1, it.col() + 1, it.value());
             }
         }
     }
 
-    Solver::Solver(const Eigen::SparseMatrix<double> &G,
-                   const Eigen::SparseMatrix<double> &A,
-                   const Eigen::VectorXd &c,
-                   const Eigen::VectorXd &h,
-                   const Eigen::VectorXd &b,
-                   const Eigen::VectorXi &soc_dims)
+    Solver::Solver(const cuDSS::SparseMatrix<double> &G,
+                   const cuDSS::SparseMatrix<double> &A,
+                   const cuDSS::Vector &c,
+                   const cuDSS::Vector &h,
+                   const cuDSS::Vector &b,
+                   const cuDSS::VectorInt &soc_dims)
     {
         build(G, A, c, h, b, soc_dims);
     }
@@ -93,27 +93,27 @@ namespace EiCOS
                    double *Apr, int *Ajc, int *Air,
                    double *c, double *h, double *b)
     {
-        Eigen::SparseMatrix<double> G_;
-        Eigen::SparseMatrix<double> A_;
-        Eigen::VectorXd c_;
-        Eigen::VectorXd h_;
-        Eigen::VectorXd b_;
-        Eigen::VectorXi q_;
+        cuDSS::SparseMatrix<double> G_;
+        cuDSS::SparseMatrix<double> A_;
+        cuDSS::Vector c_;
+        cuDSS::Vector h_;
+        cuDSS::Vector b_;
+        cuDSS::VectorInt q_;
 
         if (Gpr and Gjc and Gir)
         {
-            G_ = Eigen::Map<Eigen::SparseMatrix<double>>(m, n, Gjc[n], Gjc, Gir, Gpr);
-            q_ = Eigen::Map<Eigen::VectorXi>(q, ncones);
-            h_ = Eigen::Map<Eigen::VectorXd>(h, m);
+            G_ = cuDSS::Map<cuDSS::SparseMatrix<double>>(m, n, Gjc[n], Gjc, Gir, Gpr);
+            q_ = cuDSS::Map<cuDSS::VectorInt>(q, ncones);
+            h_ = cuDSS::Map<cuDSS::Vector>(h, m);
         }
         if (Apr and Ajc and Air)
         {
-            A_ = Eigen::Map<Eigen::SparseMatrix<double>>(p, n, Ajc[n], Ajc, Air, Apr);
-            b_ = Eigen::Map<Eigen::VectorXd>(b, p);
+            A_ = cuDSS::Map<cuDSS::SparseMatrix<double>>(p, n, Ajc[n], Ajc, Air, Apr);
+            b_ = cuDSS::Map<cuDSS::Vector>(b, p);
         }
         if (c)
         {
-            c_ = Eigen::Map<Eigen::VectorXd>(c, n);
+            c_ = cuDSS::Map<cuDSS::Vector>(c, n);
         }
 
         build(G_, A_, c_, h_, b_, q_);
@@ -129,12 +129,12 @@ namespace EiCOS
         return w.i;
     }
 
-    void Solver::build(const Eigen::SparseMatrix<double> &G,
-                       const Eigen::SparseMatrix<double> &A,
-                       const Eigen::VectorXd &c,
-                       const Eigen::VectorXd &h,
-                       const Eigen::VectorXd &b,
-                       const Eigen::VectorXi &soc_dims)
+    void Solver::build(const cuDSS::SparseMatrix<double> &G,
+                       const cuDSS::SparseMatrix<double> &A,
+                       const cuDSS::Vector &c,
+                       const cuDSS::Vector &h,
+                       const cuDSS::Vector &b,
+                       const cuDSS::VectorInt &soc_dims)
     {
         assert(not(c.hasNaN() or h.hasNaN() or b.hasNaN()));
 
@@ -248,51 +248,51 @@ namespace EiCOS
         KKT_AG_ptr.reserve(A.nonZeros() + G.nonZeros());
     }
 
-    const Eigen::VectorXd &Solver::solution() const
+    const cuDSS::Vector &Solver::solution() const
     {
         return w.x;
     }
 
-    void maxRows(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
+    void maxRows(cuDSS::Vector &e, const cuDSS::SparseMatrix<double> m)
     {
         for (int j = 0; j < m.cols(); j++)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
             {
                 e(it.row()) = std::max(std::fabs(it.value()), e(it.row()));
             }
         }
     }
 
-    void maxCols(Eigen::VectorXd &e, const Eigen::SparseMatrix<double> m)
+    void maxCols(cuDSS::Vector &e, const cuDSS::SparseMatrix<double> m)
     {
         for (int j = 0; j < m.cols(); j++)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
             {
                 e(j) = std::max(std::fabs(it.value()), e(j));
             }
         }
     }
 
-    void equilibrateRows(const Eigen::VectorXd &e, Eigen::SparseMatrix<double> &m)
+    void equilibrateRows(const cuDSS::Vector &e, cuDSS::SparseMatrix<double> &m)
     {
         for (int j = 0; j < m.cols(); j++)
         {
             /* equilibrate the rows of a matrix */
-            for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
             {
                 it.valueRef() /= e(it.row());
             }
         }
     }
 
-    void equilibrateCols(const Eigen::VectorXd &e, Eigen::SparseMatrix<double> &m)
+    void equilibrateCols(const cuDSS::Vector &e, cuDSS::SparseMatrix<double> &m)
     {
         for (int j = 0; j < m.cols(); j++)
         {
             /* equilibrate the columns of a matrix */
-            for (Eigen::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(m, j); it; ++it)
             {
                 it.valueRef() /= e(j);
             }
@@ -305,9 +305,9 @@ namespace EiCOS
         A_equil.resize(n_eq);
         G_equil.resize(n_ineq);
 
-        Eigen::VectorXd x_tmp(n_var);
-        Eigen::VectorXd A_tmp(n_eq);
-        Eigen::VectorXd G_tmp(n_ineq);
+        cuDSS::Vector x_tmp(n_var);
+        cuDSS::Vector A_tmp(n_eq);
+        cuDSS::Vector G_tmp(n_ineq);
 
         /* Initialize equilibration vector to 1 */
         x_equil.setOnes();
@@ -373,13 +373,13 @@ namespace EiCOS
         equibrilated = true;
     }
 
-    void restore(const Eigen::VectorXd &d, const Eigen::VectorXd &e,
-                 Eigen::SparseMatrix<double> &m)
+    void restore(const cuDSS::Vector &d, const cuDSS::Vector &e,
+                 cuDSS::SparseMatrix<double> &m)
     {
         assert(not m.IsRowMajor);
         for (int col = 0; col < m.cols(); ++col)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(m, col); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(m, col); it; ++it)
             {
                 it.valueRef() *= d(it.row()) * e(it.col());
             }
@@ -408,9 +408,9 @@ namespace EiCOS
      * Returns false as soon as any multiplier or slack leaves the cone,
      * as this indicates severe problems.
      */
-    bool Solver::updateScalings(const Eigen::VectorXd &s,
-                                const Eigen::VectorXd &z,
-                                Eigen::VectorXd &lambda)
+    bool Solver::updateScalings(const cuDSS::Vector &s,
+                                const cuDSS::Vector &z,
+                                cuDSS::Vector &lambda)
     {
         /* LP cone */
         lp_cone.v = s.head(n_lc).cwiseQuotient(z.head(n_lc));
@@ -482,7 +482,7 @@ namespace EiCOS
      * Fast multiplication by scaling matrix.
      * Returns lambda = W * z
      */
-    void Solver::scale(const Eigen::VectorXd &z, Eigen::VectorXd &lambda)
+    void Solver::scale(const cuDSS::Vector &z, cuDSS::Vector &lambda)
     {
         /* LP cone */
         lambda.head(n_lc) = lp_cone.w.cwiseProduct(z.head(n_lc));
@@ -758,7 +758,7 @@ namespace EiCOS
      * If it is already in the cone, r is simply copied to s.
      * Otherwise s = r + (1 + alpha) * e where alpha is the biggest residual.
      */
-    void Solver::bringToCone(const Eigen::VectorXd &r, Eigen::VectorXd &s)
+    void Solver::bringToCone(const cuDSS::Vector &r, cuDSS::Vector &s)
     {
         double alpha = -settings.gamma;
 
@@ -898,7 +898,7 @@ namespace EiCOS
 
         /* Do LDLT factorization */
         ldlt.factorize(K);
-        if (ldlt.info() != Eigen::Success)
+        if (ldlt.info() != cuDSS::Success)
         {
             print_dbg("Failed to factorize matrix while initializing!\n");
             return exitcode::fatal;
@@ -926,9 +926,9 @@ namespace EiCOS
          */
 
         /* Solve for RHS [0; b; h] */
-        Eigen::VectorXd dx1(n_var);
-        Eigen::VectorXd dy1(n_eq);
-        Eigen::VectorXd dz1(n_ineq);
+        cuDSS::Vector dx1(n_var);
+        cuDSS::Vector dy1(n_eq);
+        cuDSS::Vector dz1(n_ineq);
         print_dbg("Solving for RHS1.\n");
         w.i.nitref1 = solveKKT(rhs1, dx1, dy1, dz1, true);
 
@@ -959,9 +959,9 @@ namespace EiCOS
          */
 
         /* Solve for RHS [-c; 0; 0] */
-        Eigen::VectorXd dx2(n_var);
-        Eigen::VectorXd dy2(n_eq);
-        Eigen::VectorXd dz2(n_ineq);
+        cuDSS::Vector dx2(n_var);
+        cuDSS::Vector dy2(n_eq);
+        cuDSS::Vector dz2(n_ineq);
         print_dbg("Solving for RHS2.\n");
         w.i.nitref2 = solveKKT(rhs2, dx2, dy2, dz2, true);
 
@@ -1163,7 +1163,7 @@ namespace EiCOS
 
             ldlt.factorize(K);
 
-            if (ldlt.info() != Eigen::Success)
+            if (ldlt.info() != cuDSS::Success)
             {
                 print_dbg("Failed to factorize matrix after update!\n");
                 return exitcode::fatal;
@@ -1281,8 +1281,8 @@ namespace EiCOS
      */
     void Solver::RHScombined()
     {
-        Eigen::VectorXd ds1(n_ineq);
-        Eigen::VectorXd ds2(n_ineq);
+        cuDSS::Vector ds1(n_ineq);
+        cuDSS::Vector ds2(n_ineq);
 
         /* ds = lambda o lambda + W \ s o Wz - sigma * mu * e) */
         conicProduct(w.lambda, w.lambda, ds1);
@@ -1327,9 +1327,9 @@ namespace EiCOS
     /**
      * Conic division, implements the "\" operator, v = u \ w
      */
-    void Solver::conicDivision(const Eigen::VectorXd &u,
-                               const Eigen::VectorXd &w,
-                               Eigen::VectorXd &v)
+    void Solver::conicDivision(const cuDSS::Vector &u,
+                               const cuDSS::Vector &w,
+                               cuDSS::Vector &v)
     {
         /* LP cone */
         v.head(n_lc) = w.head(n_lc).cwiseQuotient(u.head(n_lc));
@@ -1354,9 +1354,9 @@ namespace EiCOS
      * Conic product, implements the "o" operator, w = u o v
      * and returns e' * w (where e is the conic 1-vector)
      */
-    double Solver::conicProduct(const Eigen::VectorXd &u,
-                                const Eigen::VectorXd &v,
-                                Eigen::VectorXd &w)
+    double Solver::conicProduct(const cuDSS::Vector &u,
+                                const cuDSS::Vector &v,
+                                cuDSS::Vector &w)
     {
         /* LP cone */
         w.head(n_lc) = u.head(n_lc).cwiseProduct(v.head(n_lc));
@@ -1377,7 +1377,7 @@ namespace EiCOS
         return mu;
     }
 
-    double Solver::lineSearch(Eigen::VectorXd &lambda, Eigen::VectorXd &ds, Eigen::VectorXd &dz,
+    double Solver::lineSearch(cuDSS::Vector &lambda, cuDSS::Vector &ds, cuDSS::Vector &dz,
                               double tau, double dtau, double kap, double dkap)
     {
         /* LP cone */
@@ -1424,7 +1424,7 @@ namespace EiCOS
                 continue;
 
             const double lknorm = std::sqrt(lknorm2);
-            const Eigen::VectorXd lkbar = lambda.segment(cone_start, sc.dim) / lknorm;
+            const cuDSS::Vector lkbar = lambda.segment(cone_start, sc.dim) / lknorm;
 
             const double lknorminv = 1. / lknorm;
 
@@ -1437,14 +1437,14 @@ namespace EiCOS
             /* Now construct rhok and sigmak, the first element is different */
             double factor;
 
-            Eigen::VectorXd rho(sc.dim);
+            cuDSS::Vector rho(sc.dim);
             rho(0) = lknorminv * lkbar_times_dsk;
             factor = (lkbar_times_dsk + ds(cone_start)) / (lkbar(0) + 1.);
             rho.tail(sc.dim - 1) = lknorminv * (ds.segment(cone_start + 1, sc.dim - 1) -
                                                 factor * lkbar.segment(1, sc.dim - 1));
             const double rhonorm = rho.tail(sc.dim - 1).norm() - rho(0);
 
-            Eigen::VectorXd sigma(sc.dim);
+            cuDSS::Vector sigma(sc.dim);
             sigma(0) = lknorminv * lkbar_times_dzk;
             factor = (lkbar_times_dzk + dz(cone_start)) / (lkbar(0) + 1.);
             sigma.tail(sc.dim - 1) = lknorminv * (dz.segment(cone_start + 1, sc.dim - 1) -
@@ -1468,24 +1468,24 @@ namespace EiCOS
         return alpha;
     }
 
-    size_t Solver::solveKKT(const Eigen::VectorXd &rhs, // dim_K
-                            Eigen::VectorXd &dx,        // n_var
-                            Eigen::VectorXd &dy,        // n_eq
-                            Eigen::VectorXd &dz,        // n_ineq
+    size_t Solver::solveKKT(const cuDSS::Vector &rhs, // dim_K
+                            cuDSS::Vector &dx,        // n_var
+                            cuDSS::Vector &dy,        // n_eq
+                            cuDSS::Vector &dz,        // n_ineq
                             bool initialize)
     {
-        Eigen::VectorXd x = ldlt.solve(rhs);
+        cuDSS::Vector x = ldlt.solve(rhs);
 
-        const double error_threshold = (1. + rhs.lpNorm<Eigen::Infinity>()) * settings.linsysacc;
+        const double error_threshold = (1. + rhs.lpNorm<cuDSS::Infinity>()) * settings.linsysacc;
 
         double nerr_prev = std::numeric_limits<double>::max(); // Previous refinement error
-        Eigen::VectorXd dx_ref(dim_K);                         // Refinement vector
+        cuDSS::Vector dx_ref(dim_K);                         // Refinement vector
 
         const size_t mtilde = n_ineq + 2 * so_cones.size(); // Size of expanded cone block
 
-        const Eigen::VectorXd &bx = rhs.head(n_var);
-        const Eigen::VectorXd &by = rhs.segment(n_var, n_eq);
-        const Eigen::VectorXd &bz = rhs.tail(mtilde);
+        const cuDSS::Vector &bx = rhs.head(n_var);
+        const cuDSS::Vector &by = rhs.segment(n_var, n_eq);
+        const cuDSS::Vector &bz = rhs.tail(mtilde);
 
         print_dbg("IR: it  ||ex||   ||ey||   ||ez|| (threshold: {:2.3e})\n", error_threshold);
         print_dbg("    --------------------------------------------------\n");
@@ -1495,8 +1495,8 @@ namespace EiCOS
         for (k_ref = 0; k_ref <= settings.nitref; k_ref++)
         {
             /* Copy solution into arrays */
-            const Eigen::VectorXd &dx = x.head(n_var);
-            const Eigen::VectorXd &dy = x.segment(n_var, n_eq);
+            const cuDSS::Vector &dx = x.head(n_var);
+            const cuDSS::Vector &dy = x.segment(n_var, n_eq);
             dz.head(n_lc) = x.segment(n_var + n_eq, n_lc);
             size_t dz_index = n_lc;
             size_t x_index = n_var + n_eq + n_lc;
@@ -1512,30 +1512,30 @@ namespace EiCOS
 
             /* Error on dx */
             /* ex = bx - A' * dy - G' * dz */
-            Eigen::VectorXd ex = bx - Gt * dz;
+            cuDSS::Vector ex = bx - Gt * dz;
             if (n_eq > 0)
             {
                 ex -= At * dy;
             }
             ex -= settings.deltastat * dx;
-            const double nex = ex.lpNorm<Eigen::Infinity>();
+            const double nex = ex.lpNorm<cuDSS::Infinity>();
 
             /* Error on dy */
             /* ey = by - A * dx */
-            Eigen::VectorXd ey = by;
+            cuDSS::Vector ey = by;
             if (n_eq > 0)
             {
                 ey -= A * dx;
             }
             ey += settings.deltastat * dy;
-            const double ney = ey.lpNorm<Eigen::Infinity>();
+            const double ney = ey.lpNorm<cuDSS::Infinity>();
 
             /* Error on ez */
             /* ez = bz - G * dx + V * dz_true */
-            Eigen::VectorXd Gdx = G * dx;
+            cuDSS::Vector Gdx = G * dx;
 
             /* LP cone */
-            Eigen::VectorXd ez(mtilde);
+            cuDSS::Vector ez(mtilde);
             ez.head(n_lc) = bz.head(n_lc) - Gdx.head(n_lc) +
                             settings.deltastat * dz.head(n_lc);
 
@@ -1555,7 +1555,7 @@ namespace EiCOS
             }
             assert(ez_index == mtilde and dz_index == n_ineq);
 
-            const Eigen::VectorXd &dz_true = x.tail(mtilde);
+            const cuDSS::Vector &dz_true = x.tail(mtilde);
             if (initialize)
             {
                 ez += dz_true;
@@ -1564,7 +1564,7 @@ namespace EiCOS
             {
                 scale2add(dz_true, ez);
             }
-            const double nez = ez.lpNorm<Eigen::Infinity>();
+            const double nez = ez.lpNorm<cuDSS::Infinity>();
 
             print_dbg("     {}   {:.1g}    {:.1g}    {:.1g} \n", k_ref, nex, ney, nez);
 
@@ -1594,7 +1594,7 @@ namespace EiCOS
             nerr_prev = nerr;
 
             /* Solve for refinement */
-            Eigen::VectorXd e(dim_K);
+            cuDSS::Vector e(dim_K);
             e << ex, ey, ez;
             dx_ref = ldlt.solve(e);
 
@@ -1626,7 +1626,7 @@ namespace EiCOS
      * Computes y += W^2 * x;
      * 
      */
-    void Solver::scale2add(const Eigen::VectorXd &x, Eigen::VectorXd &y)
+    void Solver::scale2add(const cuDSS::Vector &x, cuDSS::Vector &y)
     {
         /* LP cone */
         y.head(n_lc) += lp_cone.v.cwiseProduct(x.head(n_lc));
@@ -1759,7 +1759,7 @@ namespace EiCOS
         }
         K.reserve(K_nonzeros);
 
-        std::vector<Eigen::Triplet<double>> K_triplets;
+        std::vector<cuDSS::Triplet<double>> K_triplets;
         K_triplets.reserve(K_nonzeros);
 
         /* I (1,1) Static regularization */
@@ -1778,7 +1778,7 @@ namespace EiCOS
         /* A' (1,2) */
         for (int col = 0; col < At.cols(); col++)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
             {
                 K_triplets.emplace_back(it.row(), A.cols() + col, it.value());
             }
@@ -1792,7 +1792,7 @@ namespace EiCOS
             /* Linear block */
             for (size_t col = 0; col < n_lc; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
+                for (cuDSS::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
                     K_triplets.emplace_back(it.row(), col_K, it.value());
                 }
@@ -1805,7 +1805,7 @@ namespace EiCOS
             {
                 for (size_t col = 0; col < sc.dim; col++)
                 {
-                    for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
+                    for (cuDSS::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                     {
                         K_triplets.emplace_back(it.row(), col_K, it.value());
                     }
@@ -1901,7 +1901,7 @@ namespace EiCOS
         /* A' (1,2) */
         for (int col = 0; col < At.cols(); col++)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
             {
                 KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K));
             }
@@ -1915,7 +1915,7 @@ namespace EiCOS
             /* Linear block */
             for (size_t col = 0; col < n_lc; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
+                for (cuDSS::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
                     KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K));
                 }
@@ -1928,7 +1928,7 @@ namespace EiCOS
             {
                 for (size_t col = 0; col < sc.dim; col++)
                 {
-                    for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
+                    for (cuDSS::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                     {
                         KKT_AG_ptr.push_back(&K.coeffRef(it.row(), col_K));
                     }
@@ -1994,7 +1994,7 @@ namespace EiCOS
         /* A' (1,2) */
         for (int col = 0; col < At.cols(); col++)
         {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
+            for (cuDSS::SparseMatrix<double>::InnerIterator it(At, col); it; ++it)
             {
                 *KKT_AG_ptr[ptr_i++] = it.value();
             }
@@ -2007,7 +2007,7 @@ namespace EiCOS
             /* Linear block */
             for (size_t col = 0; col < n_lc; col++)
             {
-                for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
+                for (cuDSS::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                 {
                     *KKT_AG_ptr[ptr_i++] = it.value();
                 }
@@ -2019,7 +2019,7 @@ namespace EiCOS
             {
                 for (size_t col = 0; col < sc.dim; col++)
                 {
-                    for (Eigen::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
+                    for (cuDSS::SparseMatrix<double>::InnerIterator it(Gt, col_Gt); it; ++it)
                     {
                         *KKT_AG_ptr[ptr_i++] = it.value();
                     }
@@ -2029,11 +2029,11 @@ namespace EiCOS
         }
     }
 
-    void Solver::updateData(const Eigen::SparseMatrix<double> &G,
-                            const Eigen::SparseMatrix<double> &A,
-                            const Eigen::VectorXd &c,
-                            const Eigen::VectorXd &h,
-                            const Eigen::VectorXd &b)
+    void Solver::updateData(const cuDSS::SparseMatrix<double> &G,
+                            const cuDSS::SparseMatrix<double> &A,
+                            const cuDSS::Vector &c,
+                            const cuDSS::Vector &h,
+                            const cuDSS::Vector &b)
     {
         std::copy(G.valuePtr(), G.valuePtr() + G.nonZeros(), this->G.valuePtr());
         std::copy(A.valuePtr(), A.valuePtr() + A.nonZeros(), this->A.valuePtr());
@@ -2060,17 +2060,17 @@ namespace EiCOS
         {
             for (int i = 0; i < G.nonZeros(); i++)
                 G.valuePtr()[i] = Gpr[i];
-            this->h = Eigen::Map<Eigen::VectorXd>(h, n_ineq);
+            this->h = cuDSS::Map<cuDSS::Vector>(h, n_ineq);
         }
         if (Apr)
         {
             for (int i = 0; i < A.nonZeros(); i++)
                 A.valuePtr()[i] = Apr[i];
-            this->b = Eigen::Map<Eigen::VectorXd>(b, n_eq);
+            this->b = cuDSS::Map<cuDSS::Vector>(b, n_eq);
         }
         if (c)
         {
-            this->c = Eigen::Map<Eigen::VectorXd>(c, n_var);
+            this->c = cuDSS::Map<cuDSS::Vector>(c, n_var);
         }
 
         setEquilibration();
@@ -2085,7 +2085,7 @@ namespace EiCOS
     // {
     //     std::ofstream out(path);
 
-    //     Eigen::IOFormat formatter(Eigen::FullPrecision, Eigen::DontAlignCols, ", ");
+    //     cuDSS::IOFormat formatter(cuDSS::FullPrecision, cuDSS::DontAlignCols, ", ");
 
     //     print(out, "idxint n = {};\n", n_var);
     //     print(out, "idxint m = {};\n", n_ineq);
@@ -2095,7 +2095,7 @@ namespace EiCOS
 
     //     if (n_sc > 0)
     //     {
-    //         Eigen::VectorXi q(n_sc);
+    //         cuDSS::VectorInt q(n_sc);
     //         for (int i = 0; i < q.size(); i++)
     //         {
     //             q(i) = so_cones[i].dim;
@@ -2127,13 +2127,13 @@ namespace EiCOS
     //     {
     //         print(out, "idxint Gjc[{}] = {{{}}};\n",
     //               G.nonZeros(),
-    //               Eigen::Map<Eigen::VectorXi>(G.outerIndexPtr(), G.nonZeros()).transpose().format(formatter));
+    //               cuDSS::Map<cuDSS::VectorInt>(G.outerIndexPtr(), G.nonZeros()).transpose().format(formatter));
     //         print(out, "idxint Gir[{}] = {{{}}};\n",
     //               G.nonZeros(),
-    //               Eigen::Map<Eigen::VectorXi>(G.innerIndexPtr(), G.nonZeros()).transpose().format(formatter));
+    //               cuDSS::Map<cuDSS::VectorInt>(G.innerIndexPtr(), G.nonZeros()).transpose().format(formatter));
     //         print(out, "pfloat Gpr[{}] = {{{}}};\n",
     //               G.nonZeros(),
-    //               Eigen::Map<Eigen::VectorXd>(G.valuePtr(), G.nonZeros()).transpose().format(formatter));
+    //               cuDSS::Map<cuDSS::Vector>(G.valuePtr(), G.nonZeros()).transpose().format(formatter));
     //     }
     //     else
     //     {
@@ -2146,13 +2146,13 @@ namespace EiCOS
     //     {
     //         print(out, "idxint Ajc[{}] = {{{}}};\n",
     //               A.nonZeros(),
-    //               Eigen::Map<Eigen::VectorXi>(A.outerIndexPtr(), A.nonZeros()).transpose().format(formatter));
+    //               cuDSS::Map<cuDSS::VectorInt>(A.outerIndexPtr(), A.nonZeros()).transpose().format(formatter));
     //         print(out, "idxint Air[{}] = {{{}}};\n",
     //               A.nonZeros(),
-    //               Eigen::Map<Eigen::VectorXi>(A.innerIndexPtr(), A.nonZeros()).transpose().format(formatter));
+    //               cuDSS::Map<cuDSS::VectorInt>(A.innerIndexPtr(), A.nonZeros()).transpose().format(formatter));
     //         print(out, "pfloat Apr[{}] = {{{}}};\n",
     //               A.nonZeros(),
-    //               Eigen::Map<Eigen::VectorXd>(A.valuePtr(), A.nonZeros()).transpose().format(formatter));
+    //               cuDSS::Map<cuDSS::Vector>(A.valuePtr(), A.nonZeros()).transpose().format(formatter));
     //     }
     //     else
     //     {
